@@ -1,11 +1,69 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const App = () => {
   const [registerMessage, setRegisterMessage] = useState("");
   const [registerError, setRegisterError] = useState(false);
+  const [loginMessage, setLoginMessage] = useState("");
+  const [loginError, setLoginError] = useState(false);
+  const [memberSession, setMemberSession] = useState(null);
 
   const handleSubmit = (event) => {
     event.preventDefault();
+  };
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("vv_member_session");
+    if (!saved) return;
+    try {
+      setMemberSession(JSON.parse(saved));
+    } catch (err) {
+      sessionStorage.removeItem("vv_member_session");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!memberSession) {
+      sessionStorage.removeItem("vv_member_session");
+      return;
+    }
+    sessionStorage.setItem("vv_member_session", JSON.stringify(memberSession));
+  }, [memberSession]);
+
+  const handleMemberLogin = async (event) => {
+    event.preventDefault();
+    setLoginMessage("");
+    setLoginError(false);
+
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const payload = {
+      memberId: data.get("memberId"),
+      password: data.get("password")
+    };
+
+    try {
+      const response = await fetch("/api/member-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error || "Unable to login");
+      }
+      setMemberSession(body);
+      setLoginMessage("Login successful");
+      form.reset();
+    } catch (err) {
+      setLoginError(true);
+      setLoginMessage(err.message);
+    }
+  };
+
+  const handleLogout = () => {
+    setMemberSession(null);
+    setLoginError(false);
+    setLoginMessage("");
   };
 
   const handleRegister = async (event) => {
@@ -27,13 +85,100 @@ const App = () => {
       if (!response.ok) {
         throw new Error(data.error || "Unable to submit registration");
       }
-      setRegisterMessage(`Registration saved. Your ID is ${data.id}.`);
+      setRegisterMessage(
+        `Registration saved. Member ID: ${data.id}. Use this ID and your password to login.`
+      );
       form.reset();
     } catch (err) {
       setRegisterError(true);
       setRegisterMessage(err.message);
     }
   };
+
+  if (memberSession) {
+    const profiles = memberSession.profiles || [];
+    const photosAvailable = profiles.filter((profile) => profile.hasPhoto).length;
+
+    return (
+      <div className="member-page">
+        <header className="site-header">
+          <div className="header-inner">
+            <div className="brand">
+              <div className="brand-mark">VV</div>
+              <div>
+                <p className="brand-name">Vedic Vivaha</p>
+                <p className="brand-tag">Member Profile List</p>
+              </div>
+            </div>
+            <button className="btn ghost" type="button" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <section className="section member-section">
+          <div className="member-shell reveal">
+            <div className="member-head">
+              <div>
+                <p className="eyebrow">Member Dashboard</p>
+                <h2>Matching Profiles</h2>
+                <p>
+                  Logged in as <strong>{memberSession.member?.name}</strong> (
+                  {memberSession.member?.id})
+                </p>
+              </div>
+              <div className="member-stats">
+                <article className="member-stat">
+                  <p className="member-stat-value">{profiles.length}</p>
+                  <p className="member-stat-label">Profiles</p>
+                </article>
+                <article className="member-stat">
+                  <p className="member-stat-value">{photosAvailable}</p>
+                  <p className="member-stat-label">Photos</p>
+                </article>
+              </div>
+            </div>
+            <div className="member-table-wrap">
+              <table className="member-table">
+                <thead>
+                  <tr>
+                    <th>S.No</th>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Height</th>
+                    <th>Star - Padham</th>
+                    <th>Photo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map((profile) => (
+                    <tr key={profile.profileId}>
+                      <td>{profile.sNo}</td>
+                      <td>{profile.profileId}</td>
+                      <td className="member-name-cell">{profile.name}</td>
+                      <td>{profile.height}</td>
+                      <td>
+                        <span className="member-star-pill">{profile.starPadham}</span>
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            profile.hasPhoto ? "member-photo yes" : "member-photo no"
+                          }
+                        >
+                          {profile.hasPhoto ? "Available" : "Not Available"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -94,17 +239,32 @@ const App = () => {
             <div className="login-card reveal">
               <div className="login-head">
                 <h3>Member Login</h3>
-                <p>Enter only the profile number, without year or prefix.</p>
+                <p>Use your Member ID generated at registration and your password.</p>
               </div>
-              <form className="login-form" onSubmit={handleSubmit}>
+              <form className="login-form" onSubmit={handleMemberLogin}>
                 <label>
                   <span>Member ID</span>
-                  <input type="text" placeholder="e.g. 181412" required />
+                  <input
+                    type="text"
+                    name="memberId"
+                    placeholder="e.g. VV-123456"
+                    required
+                  />
                 </label>
                 <label>
                   <span>Password</span>
-                  <input type="password" placeholder="••••••••" required />
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="••••••••"
+                    required
+                  />
                 </label>
+                {loginMessage && (
+                  <p className={`form-message ${loginError ? "error" : "success"}`}>
+                    {loginMessage}
+                  </p>
+                )}
                 <button className="btn primary" type="submit">Login</button>
               </form>
               <div className="login-links">
@@ -292,6 +452,16 @@ const App = () => {
               <label>
                 <span>Email Address</span>
                 <input type="email" name="email" placeholder="you@example.com" required />
+              </label>
+              <label>
+                <span>Create Password</span>
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="At least 4 characters"
+                  minLength="4"
+                  required
+                />
               </label>
               <label>
                 <span>Phone Number</span>
