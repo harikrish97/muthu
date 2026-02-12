@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "./lib/api";
 
 const AdminApp = () => {
   const [registrations, setRegistrations] = useState([]);
@@ -9,11 +10,7 @@ const AdminApp = () => {
     setAdminLoading(true);
     setAdminError("");
     try {
-      const response = await fetch("/api/registrations");
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to load registrations");
-      }
+      const data = await apiFetch("/registrations");
       setRegistrations(data);
     } catch (err) {
       setAdminError(err.message);

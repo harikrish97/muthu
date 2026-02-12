@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "./lib/api";
 
 const App = () => {
   const [registerMessage, setRegisterMessage] = useState("");
@@ -42,15 +43,11 @@ const App = () => {
     };
 
     try {
-      const response = await fetch("/api/member-login", {
+      const body = await apiFetch("/member-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      const body = await response.json();
-      if (!response.ok) {
-        throw new Error(body.error || "Unable to login");
-      }
       setMemberSession(body);
       setLoginMessage("Login successful");
       form.reset();
@@ -76,15 +73,11 @@ const App = () => {
     const payload = Object.fromEntries(formData.entries());
 
     try {
-      const response = await fetch("/api/registrations", {
+      const data = await apiFetch("/registrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to submit registration");
-      }
       setRegisterMessage(
         `Registration saved. Member ID: ${data.id}. Use this ID and your password to login.`
       );
