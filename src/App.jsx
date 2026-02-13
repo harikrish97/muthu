@@ -7,8 +7,18 @@ const App = () => {
   const [loginMessage, setLoginMessage] = useState("");
   const [loginError, setLoginError] = useState(false);
   const [memberSession, setMemberSession] = useState(null);
-  const [memberView, setMemberView] = useState("dashboard");
+  const [memberView, setMemberView] = useState("matches");
   const [memberLoading, setMemberLoading] = useState(false);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchError, setMatchError] = useState("");
+  const [recentProfiles, setRecentProfiles] = useState([]);
+  const [profilesTotal, setProfilesTotal] = useState(0);
+  const [profilesPage, setProfilesPage] = useState(1);
+  const [profilesTotalPages, setProfilesTotalPages] = useState(1);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [selectedProfileLoading, setSelectedProfileLoading] = useState(false);
+  const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
+  const [unlockBusy, setUnlockBusy] = useState(false);
   const [addressDraft, setAddressDraft] = useState("");
   const [occupationDraft, setOccupationDraft] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
@@ -25,6 +35,7 @@ const App = () => {
     try {
       const parsed = JSON.parse(saved);
       setMemberSession(parsed);
+      setMemberView("matches");
       setAddressDraft(parsed?.member?.address || "");
       setOccupationDraft(parsed?.member?.occupation || "");
       setMessageDraft(parsed?.member?.message || "");
@@ -83,6 +94,12 @@ const App = () => {
     sessionStorage.setItem("vv_member_session", JSON.stringify(memberSession));
   }, [memberSession]);
 
+  useEffect(() => {
+    if (memberSession?.token) {
+      fetchRecentProfiles(memberSession);
+    }
+  }, [memberSession?.token, profilesPage]);
+
   const handleMemberLogin = async (event) => {
     event.preventDefault();
     setLoginMessage("");
@@ -102,7 +119,8 @@ const App = () => {
         body: JSON.stringify(payload)
       });
       setMemberSession(body);
-      setMemberView("dashboard");
+      setMemberView("matches");
+      setProfilesPage(1);
       setAddressDraft(body?.member?.address || "");
       setOccupationDraft(body?.member?.occupation || "");
       setMessageDraft(body?.member?.message || "");
@@ -116,7 +134,7 @@ const App = () => {
 
   const handleLogout = () => {
     setMemberSession(null);
-    setMemberView("dashboard");
+    setMemberView("matches");
     setLoginError(false);
     setLoginMessage("");
     setAddressDraft("");
@@ -124,6 +142,13 @@ const App = () => {
     setMessageDraft("");
     setAddressMessage("");
     setAddressError(false);
+    setRecentProfiles([]);
+    setProfilesTotal(0);
+    setProfilesPage(1);
+    setProfilesTotalPages(1);
+    setSelectedProfile(null);
+    setMatchError("");
+    setShowUnlockConfirm(false);
   };
 
   const handleProfileUpdate = async (event) => {
@@ -159,6 +184,126 @@ const App = () => {
     }
   };
 
+  const fetchRecentProfiles = async (sessionOverride = null) => {
+    const source = sessionOverride || memberSession;
+    if (!source?.token) return;
+
+    setMatchesLoading(true);
+    setMatchError("");
+    try {
+      const data = await apiFetch(`/member-profiles/recent?page=${profilesPage}&pageSize=20`, {
+        headers: {
+          Authorization: `Bearer ${source.token}`
+        }
+      });
+      setRecentProfiles(data.items || []);
+      setProfilesTotal(data.total || 0);
+      setProfilesTotalPages(data.totalPages || 1);
+      setMemberSession((current) =>
+        current
+          ? {
+              ...current,
+              member: {
+                ...current.member,
+                credits: data.creditsRemaining
+              }
+            }
+          : current
+      );
+    } catch (err) {
+      setMatchError(err.message);
+    } finally {
+      setMatchesLoading(false);
+    }
+  };
+
+  const getVisibleProfilePages = () => {
+    const pages = [];
+    const start = Math.max(1, profilesPage - 1);
+    const end = Math.min(profilesTotalPages, profilesPage + 1);
+
+    if (start > 1) pages.push(1);
+    if (start > 2) pages.push("...");
+    for (let p = start; p <= end; p += 1) pages.push(p);
+    if (end < profilesTotalPages - 1) pages.push("...");
+    if (end < profilesTotalPages) pages.push(profilesTotalPages);
+
+    return pages;
+  };
+
+  const openProfileDetail = async (profileId) => {
+    if (!memberSession?.token) return;
+    setSelectedProfileLoading(true);
+    setMatchError("");
+    try {
+      const data = await apiFetch(`/member-profiles/${profileId}`, {
+        headers: {
+          Authorization: `Bearer ${memberSession.token}`
+        }
+      });
+      setSelectedProfile(data);
+      setMemberSession((current) =>
+        current
+          ? {
+              ...current,
+              member: {
+                ...current.member,
+                credits: data.creditsRemaining
+              }
+            }
+          : current
+      );
+      setMemberView("detail");
+    } catch (err) {
+      setMatchError(err.message);
+    } finally {
+      setSelectedProfileLoading(false);
+    }
+  };
+
+  const confirmUnlockProfile = async () => {
+    if (!memberSession?.token || !selectedProfile?.profile?.profileId) return;
+    setUnlockBusy(true);
+    setMatchError("");
+    try {
+      const data = await apiFetch(
+        `/member-profiles/${selectedProfile.profile.profileId}/unlock`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${memberSession.token}`
+          }
+        }
+      );
+      setSelectedProfile({
+        profile: data.profile,
+        fullDetails: data.fullDetails,
+        creditsRemaining: data.creditsRemaining
+      });
+      setRecentProfiles((current) =>
+        current.map((item) =>
+          item.profileId === data.profile.profileId ? { ...item, unlocked: true } : item
+        )
+      );
+      setMemberSession((current) =>
+        current
+          ? {
+              ...current,
+              member: {
+                ...current.member,
+                credits: data.creditsRemaining
+              }
+            }
+          : current
+      );
+      setShowUnlockConfirm(false);
+    } catch (err) {
+      setMatchError(err.message);
+    } finally {
+      setUnlockBusy(false);
+    }
+  };
+
   const handleRegister = async (event) => {
     event.preventDefault();
     setRegisterMessage("");
@@ -185,9 +330,6 @@ const App = () => {
   };
 
   if (memberSession) {
-    const profiles = memberSession.profiles || [];
-    const photosAvailable = profiles.filter((profile) => profile.hasPhoto).length;
-
     return (
       <div className="member-page">
         <header className="site-header">
@@ -202,19 +344,24 @@ const App = () => {
               </div>
             </div>
             <div className="member-top-actions">
+              {memberView !== "matches" && (
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={() => setMemberView("matches")}
+                >
+                  Matches
+                </button>
+              )}
               <button
                 className="btn ghost"
                 type="button"
                 onClick={async () => {
-                  if (memberView === "profile") {
-                    setMemberView("dashboard");
-                    return;
-                  }
                   const ok = await refreshMemberSession();
                   if (ok) setMemberView("profile");
                 }}
               >
-                {memberView === "profile" ? "Dashboard" : "My Profile"}
+                My Profile
               </button>
               <button className="btn ghost" type="button" onClick={handleLogout}>
                 Logout
@@ -282,13 +429,81 @@ const App = () => {
               </form>
             </div>
           </section>
+        ) : memberView === "detail" ? (
+          <section className="section member-section">
+            <div className="member-shell reveal">
+              {matchError && (
+                <p className="form-message error" style={{ marginBottom: "12px" }}>
+                  {matchError}
+                </p>
+              )}
+              {!selectedProfile?.profile && (
+                <p className="form-note">Profile details unavailable.</p>
+              )}
+              {selectedProfile?.profile && (
+                <div className="match-detail-shell">
+                  <div className="match-detail-head">
+                    <img
+                      src={
+                        selectedProfile.profile.imageUrl ||
+                        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80"
+                      }
+                      alt={selectedProfile.profile.name}
+                      className="match-detail-image"
+                    />
+                    <div>
+                      <p className="eyebrow">Profile Details</p>
+                      <h2>{selectedProfile.profile.name}</h2>
+                      <p className="form-note">
+                        {selectedProfile.profile.age || "-"} yrs · {selectedProfile.profile.city || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="member-profile-grid" style={{ marginTop: "14px" }}>
+                    <div className="member-profile-item"><span>Gender</span><p>{selectedProfile.profile.gender || "-"}</p></div>
+                    <div className="member-profile-item"><span>Height</span><p>{selectedProfile.profile.height || "-"}</p></div>
+                    <div className="member-profile-item"><span>Star / Padham</span><p>{selectedProfile.profile.starPadham || "-"}</p></div>
+                    <div className="member-profile-item"><span>Education</span><p>{selectedProfile.profile.education || "-"}</p></div>
+                    <div className="member-profile-item"><span>Occupation</span><p>{selectedProfile.profile.occupation || "-"}</p></div>
+                    <div className="member-profile-item"><span>Photo</span><p>{selectedProfile.profile.hasPhoto ? "Available" : "Not Available"}</p></div>
+                  </div>
+
+                  {selectedProfile.fullDetails ? (
+                    <div className="card" style={{ marginTop: "14px" }}>
+                      <h3 style={{ marginBottom: "8px" }}>Full Details</h3>
+                      <p><strong>About:</strong> {selectedProfile.fullDetails.about || "-"}</p>
+                      <p style={{ marginTop: "8px" }}>
+                        <strong>Family Details:</strong> {selectedProfile.fullDetails.familyDetails || "-"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="card" style={{ marginTop: "14px" }}>
+                      <h3 style={{ marginBottom: "8px" }}>View Full Details</h3>
+                      <p className="form-note">
+                        Unlock this profile to view about and family details.
+                      </p>
+                      <button
+                        className="btn primary"
+                        type="button"
+                        style={{ marginTop: "10px" }}
+                        onClick={() => setShowUnlockConfirm(true)}
+                      >
+                        View Full Details (1 Credit)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
         ) : (
           <section className="section member-section">
             <div className="member-shell reveal">
               <div className="member-head">
                 <div>
                   <p className="eyebrow">Member Dashboard</p>
-                  <h2>Matching Profiles</h2>
+                  <h2>Recently Added Profiles</h2>
                   <p>
                     Logged in as <strong>{memberSession.member?.name}</strong> (
                     {memberSession.member?.id})
@@ -296,53 +511,115 @@ const App = () => {
                 </div>
                 <div className="member-stats">
                   <article className="member-stat">
-                    <p className="member-stat-value">{profiles.length}</p>
+                    <p className="member-stat-value">{profilesTotal}</p>
                     <p className="member-stat-label">Profiles</p>
                   </article>
                   <article className="member-stat">
-                    <p className="member-stat-value">{photosAvailable}</p>
-                    <p className="member-stat-label">Photos</p>
+                    <p className="member-stat-value">{memberSession.member?.credits ?? 0}</p>
+                    <p className="member-stat-label">Credits</p>
                   </article>
                 </div>
               </div>
-              <div className="member-table-wrap">
-                <table className="member-table">
-                  <thead>
-                    <tr>
-                      <th>S.No</th>
-                      <th>ID</th>
-                      <th>Name</th>
-                      <th>Height</th>
-                      <th>Star - Padham</th>
-                      <th>Photo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {profiles.map((profile) => (
-                      <tr key={profile.profileId}>
-                        <td>{profile.sNo}</td>
-                        <td>{profile.profileId}</td>
-                        <td className="member-name-cell">{profile.name}</td>
-                        <td>{profile.height}</td>
-                        <td>
-                          <span className="member-star-pill">{profile.starPadham}</span>
-                        </td>
-                        <td>
-                          <span
-                            className={
-                              profile.hasPhoto ? "member-photo yes" : "member-photo no"
-                            }
-                          >
-                            {profile.hasPhoto ? "Available" : "Not Available"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {matchError && (
+                <p className="form-message error" style={{ marginBottom: "12px" }}>
+                  {matchError}
+                </p>
+              )}
+              {matchesLoading ? (
+                <p className="form-note">Loading profiles...</p>
+              ) : (
+                <div className="recent-profile-grid">
+                  {recentProfiles.map((profile) => (
+                    <article
+                      key={profile.profileId}
+                      className="recent-profile-card"
+                      onClick={() => openProfileDetail(profile.profileId)}
+                    >
+                      <img
+                        src={
+                          profile.imageUrl ||
+                          "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80"
+                        }
+                        alt={profile.name}
+                      />
+                      <div className="recent-profile-content">
+                        <h3>{profile.name}</h3>
+                        <p>{profile.age || "-"} yrs · {profile.city || "-"}</p>
+                        <p>{profile.education || "-"}</p>
+                        <p>{profile.occupation || "-"}</p>
+                        <span className={profile.unlocked ? "unlock-pill yes" : "unlock-pill no"}>
+                          {profile.unlocked ? "Unlocked" : "Basic View"}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              {!matchesLoading && profilesTotalPages > 0 && (
+                <div className="member-pagination">
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setProfilesPage((p) => Math.max(1, p - 1))}
+                    disabled={profilesPage <= 1}
+                  >
+                    Prev
+                  </button>
+                  {getVisibleProfilePages().map((p, index) =>
+                    p === "..." ? (
+                      <span key={`ellipsis-${index}`} className="form-note" style={{ padding: "0 4px" }}>
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={`page-${p}`}
+                        className={p === profilesPage ? "btn primary" : "btn ghost"}
+                        type="button"
+                        onClick={() => setProfilesPage(p)}
+                        style={{ minWidth: "40px", padding: "8px 12px" }}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setProfilesPage((p) => Math.min(profilesTotalPages, p + 1))}
+                    disabled={profilesPage >= profilesTotalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+              {selectedProfileLoading && (
+                <p className="form-note" style={{ marginTop: "8px" }}>
+                  Opening profile...
+                </p>
+              )}
             </div>
           </section>
+        )}
+        {showUnlockConfirm && (
+          <div className="unlock-modal-overlay" onClick={() => setShowUnlockConfirm(false)}>
+            <div className="unlock-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Confirm Unlock</h3>
+              <p>
+                You are about to spend <strong>1 credit</strong> to view full details.
+              </p>
+              <p className="form-note">
+                Remaining credits now: <strong>{memberSession.member?.credits ?? 0}</strong>
+              </p>
+              <div className="unlock-modal-actions">
+                <button className="btn ghost" type="button" onClick={() => setShowUnlockConfirm(false)}>
+                  Cancel
+                </button>
+                <button className="btn primary" type="button" onClick={confirmUnlockProfile} disabled={unlockBusy}>
+                  {unlockBusy ? "Unlocking..." : "Confirm Unlock"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -637,11 +914,10 @@ const App = () => {
               </label>
               <label>
                 <span>Gender</span>
-                <select name="gender">
+                <select name="gender" required>
                   <option value="">Select</option>
                   <option value="Female">Female</option>
                   <option value="Male">Male</option>
-                  <option value="Other">Other</option>
                 </select>
               </label>
               <label>

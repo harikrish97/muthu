@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.core.config import get_settings
-from app.repositories.profile import list_profiles
+from app.repositories.profile import list_recent_profiles_for_member
 from app.repositories.registration import (
     get_registration_by_member_id,
     update_registration_member_fields,
@@ -25,15 +25,16 @@ settings = get_settings()
 
 
 def _build_member_login_response(registration, db: Session) -> MemberLoginResponse:
-    profiles = list_profiles(db)
+    profile_pairs, _ = list_recent_profiles_for_member(db, registration)
+    profiles = [profile for profile, _ in profile_pairs]
     response_profiles = [
         MemberProfile(
             sNo=index,
-            profileId=profile.profile_id,
+            profileId=profile.member_id,
             name=profile.name,
-            height=profile.height,
-            starPadham=profile.star_padham,
-            hasPhoto=profile.has_photo,
+            height="-",
+            starPadham="-",
+            hasPhoto=False,
         )
         for index, profile in enumerate(profiles, start=1)
     ]

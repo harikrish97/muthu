@@ -42,7 +42,7 @@ def create_registration(db: Session, payload: RegistrationCreate) -> Registratio
         message=payload.message,
         status="New",
         is_active=True,
-        credits=0,
+        credits=3,
         extra_data=extra_data,
     )
     db.add(registration)
