@@ -38,7 +38,8 @@ Vite runs on `http://localhost:5173` by default.
 
 ## Routes / Pages
 - Main site: `http://localhost:5173/`
-- Admin page: `http://localhost:5173/admin.html`
+- Public `admin.html` now redirects to home.
+- Private admin login page: `http://localhost:5173/secure-admin-portal-84d2.html`
 
 ## Run Backend (Local)
 ```bash
@@ -57,6 +58,10 @@ Configure backend via environment variables:
 - `DATABASE_URL`
 - `API_PREFIX`
 - `CORS_ORIGINS`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `ADMIN_TOKEN`
+- `ENFORCE_CREDIT_FOR_PROFILE_ACCESS`
 
 Frontend API selection:
 - `VITE_API_BASE_URL` controls where React sends API requests
@@ -156,24 +161,57 @@ docker compose -f docker-compose.postgres.yml up -d
 }
 ```
 - Error response: JSON with optional `error`
+- If account is disabled: `403`
+- If credit enforcement is enabled and credits are 0: `403`
 
 ### 3) List registrations (admin)
-- `GET /api/registrations`
+- `GET /api/admin/registrations` (requires `Authorization: Bearer <token>`)
+- Query params:
+  - `page`, `pageSize`
+  - `search` (name/member ID)
+  - `memberId`, `name`
+  - `isActive` (`true` / `false`)
+  - `maxCredits` (users with credits `<= maxCredits`)
+  - `sortBy` (`created_at`, `updated_at`, `name`, `member_id`, `credits`, `status`, `is_active`)
+  - `sortOrder` (`asc`, `desc`)
 - Success response: array of objects like:
 ```json
-[
-  {
-    "id": "REG-001",
-    "data": {
-      "name": "User Name",
-      "phone": "+91...",
-      "email": "user@example.com",
-      "city": "Chennai"
-    },
-    "createdAt": "2026-02-12T12:00:00.000Z",
-    "status": "New"
-  }
-]
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "pageSize": 10,
+  "totalPages": 1
+}
+```
+
+### 4) Admin login
+- `POST /api/admin/login`
+- Request body:
+```json
+{
+  "username": "admin",
+  "password": "admin123"
+}
+```
+- Success response:
+```json
+{
+  "token": "dev-admin-token-change-me"
+}
+```
+
+### 5) Admin update user
+- `PATCH /api/admin/registrations/{memberId}` (requires bearer token)
+- Supports: `name`, `email`, `phone`, `city`, `status`, `isActive`, `credits`, `extraData`
+
+### 6) Admin reset password
+- `POST /api/admin/registrations/{memberId}/reset-password` (requires bearer token)
+- Request body:
+```json
+{
+  "newPassword": "NewPass@123"
+}
 ```
 
 ## Current Behavior Notes

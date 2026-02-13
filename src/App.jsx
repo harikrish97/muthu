@@ -7,6 +7,13 @@ const App = () => {
   const [loginMessage, setLoginMessage] = useState("");
   const [loginError, setLoginError] = useState(false);
   const [memberSession, setMemberSession] = useState(null);
+  const [memberView, setMemberView] = useState("dashboard");
+  const [memberLoading, setMemberLoading] = useState(false);
+  const [addressDraft, setAddressDraft] = useState("");
+  const [occupationDraft, setOccupationDraft] = useState("");
+  const [messageDraft, setMessageDraft] = useState("");
+  const [addressMessage, setAddressMessage] = useState("");
+  const [addressError, setAddressError] = useState(false);
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -16,9 +23,55 @@ const App = () => {
     const saved = sessionStorage.getItem("vv_member_session");
     if (!saved) return;
     try {
-      setMemberSession(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      setMemberSession(parsed);
+      setAddressDraft(parsed?.member?.address || "");
+      setOccupationDraft(parsed?.member?.occupation || "");
+      setMessageDraft(parsed?.member?.message || "");
     } catch (err) {
       sessionStorage.removeItem("vv_member_session");
+    }
+  }, []);
+
+  const refreshMemberSession = async (sessionOverride = null) => {
+    const source = sessionOverride || memberSession;
+    if (!source?.token) return false;
+
+    setMemberLoading(true);
+    try {
+      const latest = await apiFetch("/member-session", {
+        headers: {
+          Authorization: `Bearer ${source.token}`
+        }
+      });
+      setMemberSession(latest);
+      setAddressDraft(latest?.member?.address || "");
+      setOccupationDraft(latest?.member?.occupation || "");
+      setMessageDraft(latest?.member?.message || "");
+      return true;
+    } catch (err) {
+      sessionStorage.removeItem("vv_member_session");
+      setMemberSession(null);
+      return false;
+    } finally {
+      setMemberLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("vv_member_session");
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      if (!parsed?.token) {
+        sessionStorage.removeItem("vv_member_session");
+        setMemberSession(null);
+        return;
+      }
+      refreshMemberSession(parsed);
+    } catch (err) {
+      sessionStorage.removeItem("vv_member_session");
+      setMemberSession(null);
     }
   }, []);
 
@@ -49,6 +102,10 @@ const App = () => {
         body: JSON.stringify(payload)
       });
       setMemberSession(body);
+      setMemberView("dashboard");
+      setAddressDraft(body?.member?.address || "");
+      setOccupationDraft(body?.member?.occupation || "");
+      setMessageDraft(body?.member?.message || "");
       setLoginMessage("Login successful");
       form.reset();
     } catch (err) {
@@ -59,8 +116,47 @@ const App = () => {
 
   const handleLogout = () => {
     setMemberSession(null);
+    setMemberView("dashboard");
     setLoginError(false);
     setLoginMessage("");
+    setAddressDraft("");
+    setOccupationDraft("");
+    setMessageDraft("");
+    setAddressMessage("");
+    setAddressError(false);
+  };
+
+  const handleProfileUpdate = async (event) => {
+    event.preventDefault();
+    if (!memberSession?.token) return;
+
+    setAddressMessage("");
+    setAddressError(false);
+    try {
+      const updatedMember = await apiFetch("/member-profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${memberSession.token}`
+        },
+        body: JSON.stringify({
+          address: addressDraft,
+          occupation: occupationDraft,
+          message: messageDraft
+        })
+      });
+      setMemberSession((current) => ({
+        ...current,
+        member: {
+          ...current.member,
+          ...updatedMember
+        }
+      }));
+      setAddressMessage("Profile updated successfully.");
+    } catch (err) {
+      setAddressError(true);
+      setAddressMessage(err.message);
+    }
   };
 
   const handleRegister = async (event) => {
@@ -100,75 +196,154 @@ const App = () => {
               <div className="brand-mark">VV</div>
               <div>
                 <p className="brand-name">Vedic Vivaha</p>
-                <p className="brand-tag">Member Profile List</p>
+                <p className="brand-tag">
+                  {memberView === "profile" ? "My Profile" : "Member Profile List"}
+                </p>
               </div>
             </div>
-            <button className="btn ghost" type="button" onClick={handleLogout}>
-              Logout
-            </button>
+            <div className="member-top-actions">
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={async () => {
+                  if (memberView === "profile") {
+                    setMemberView("dashboard");
+                    return;
+                  }
+                  const ok = await refreshMemberSession();
+                  if (ok) setMemberView("profile");
+                }}
+              >
+                {memberView === "profile" ? "Dashboard" : "My Profile"}
+              </button>
+              <button className="btn ghost" type="button" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
           </div>
         </header>
 
-        <section className="section member-section">
-          <div className="member-shell reveal">
-            <div className="member-head">
-              <div>
-                <p className="eyebrow">Member Dashboard</p>
-                <h2>Matching Profiles</h2>
+        {memberView === "profile" ? (
+          <section className="section member-section">
+            <div className="member-profile-shell reveal">
+              {memberLoading && <p className="form-note" style={{ marginBottom: "10px" }}>Loading profile...</p>}
+              <div className="member-profile-banner">
+                <p className="eyebrow">My Profile</p>
+                <h2>{memberSession.member?.name}</h2>
                 <p>
-                  Logged in as <strong>{memberSession.member?.name}</strong> (
-                  {memberSession.member?.id})
+                  Member ID: <strong>{memberSession.member?.id}</strong>
                 </p>
               </div>
-              <div className="member-stats">
-                <article className="member-stat">
-                  <p className="member-stat-value">{profiles.length}</p>
-                  <p className="member-stat-label">Profiles</p>
-                </article>
-                <article className="member-stat">
-                  <p className="member-stat-value">{photosAvailable}</p>
-                  <p className="member-stat-label">Photos</p>
-                </article>
+              <div className="member-profile-grid">
+                <div className="member-profile-item"><span>Name</span><p>{memberSession.member?.name || "-"}</p></div>
+                <div className="member-profile-item"><span>Email</span><p>{memberSession.member?.email || "-"}</p></div>
+                <div className="member-profile-item"><span>Phone</span><p>{memberSession.member?.phone || "-"}</p></div>
+                <div className="member-profile-item"><span>Gender</span><p>{memberSession.member?.gender || "-"}</p></div>
+                <div className="member-profile-item"><span>Date of Birth</span><p>{memberSession.member?.dob || "-"}</p></div>
+                <div className="member-profile-item"><span>City</span><p>{memberSession.member?.city || "-"}</p></div>
+                <div className="member-profile-item"><span>Education</span><p>{memberSession.member?.education || "-"}</p></div>
+                <div className="member-profile-item"><span>Gothram</span><p>{memberSession.member?.gothram || "-"}</p></div>
+                <div className="member-profile-item"><span>Credits</span><p>{memberSession.member?.credits ?? 0}</p></div>
+              </div>
+              <form className="member-address-form" onSubmit={handleProfileUpdate}>
+                <label>
+                  <span>Occupation (Editable)</span>
+                  <input
+                    type="text"
+                    value={occupationDraft}
+                    onChange={(e) => setOccupationDraft(e.target.value)}
+                    placeholder="Enter your occupation"
+                  />
+                </label>
+                <label>
+                  <span>Message (Editable)</span>
+                  <textarea
+                    rows="3"
+                    value={messageDraft}
+                    onChange={(e) => setMessageDraft(e.target.value)}
+                    placeholder="Enter your message"
+                  ></textarea>
+                </label>
+                <label>
+                  <span>Address (Editable)</span>
+                  <textarea
+                    rows="4"
+                    value={addressDraft}
+                    onChange={(e) => setAddressDraft(e.target.value)}
+                    placeholder="Enter your address"
+                  ></textarea>
+                </label>
+                {addressMessage && (
+                  <p className={`form-message ${addressError ? "error" : "success"}`}>
+                    {addressMessage}
+                  </p>
+                )}
+                <button className="btn primary" type="submit">Update Profile</button>
+              </form>
+            </div>
+          </section>
+        ) : (
+          <section className="section member-section">
+            <div className="member-shell reveal">
+              <div className="member-head">
+                <div>
+                  <p className="eyebrow">Member Dashboard</p>
+                  <h2>Matching Profiles</h2>
+                  <p>
+                    Logged in as <strong>{memberSession.member?.name}</strong> (
+                    {memberSession.member?.id})
+                  </p>
+                </div>
+                <div className="member-stats">
+                  <article className="member-stat">
+                    <p className="member-stat-value">{profiles.length}</p>
+                    <p className="member-stat-label">Profiles</p>
+                  </article>
+                  <article className="member-stat">
+                    <p className="member-stat-value">{photosAvailable}</p>
+                    <p className="member-stat-label">Photos</p>
+                  </article>
+                </div>
+              </div>
+              <div className="member-table-wrap">
+                <table className="member-table">
+                  <thead>
+                    <tr>
+                      <th>S.No</th>
+                      <th>ID</th>
+                      <th>Name</th>
+                      <th>Height</th>
+                      <th>Star - Padham</th>
+                      <th>Photo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {profiles.map((profile) => (
+                      <tr key={profile.profileId}>
+                        <td>{profile.sNo}</td>
+                        <td>{profile.profileId}</td>
+                        <td className="member-name-cell">{profile.name}</td>
+                        <td>{profile.height}</td>
+                        <td>
+                          <span className="member-star-pill">{profile.starPadham}</span>
+                        </td>
+                        <td>
+                          <span
+                            className={
+                              profile.hasPhoto ? "member-photo yes" : "member-photo no"
+                            }
+                          >
+                            {profile.hasPhoto ? "Available" : "Not Available"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="member-table-wrap">
-              <table className="member-table">
-                <thead>
-                  <tr>
-                    <th>S.No</th>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Height</th>
-                    <th>Star - Padham</th>
-                    <th>Photo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profiles.map((profile) => (
-                    <tr key={profile.profileId}>
-                      <td>{profile.sNo}</td>
-                      <td>{profile.profileId}</td>
-                      <td className="member-name-cell">{profile.name}</td>
-                      <td>{profile.height}</td>
-                      <td>
-                        <span className="member-star-pill">{profile.starPadham}</span>
-                      </td>
-                      <td>
-                        <span
-                          className={
-                            profile.hasPhoto ? "member-photo yes" : "member-photo no"
-                          }
-                        >
-                          {profile.hasPhoto ? "Available" : "Not Available"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
       </div>
     );
   }
@@ -476,6 +651,10 @@ const App = () => {
               <label>
                 <span>City</span>
                 <input type="text" name="city" placeholder="City" />
+              </label>
+              <label>
+                <span>Address</span>
+                <input type="text" name="address" placeholder="Address" />
               </label>
               <label>
                 <span>Education</span>

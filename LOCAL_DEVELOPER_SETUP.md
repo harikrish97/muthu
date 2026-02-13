@@ -71,6 +71,10 @@ Backend env file (`backend/.env`) should contain:
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/vedic_vivaha
 API_PREFIX=/api
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
+ADMIN_TOKEN=dev-admin-token-change-me
+ENFORCE_CREDIT_FOR_PROFILE_ACCESS=false
 ```
 
 Optional frontend env file (`.env`) for local overrides:
@@ -93,6 +97,7 @@ URLs:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
 - Health check: `http://localhost:8000/api/health`
+- Private admin login page: `http://localhost:5173/secure-admin-portal-84d2.html`
 
 ## 6) Manual run (optional)
 

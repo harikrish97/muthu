@@ -13,6 +13,7 @@ class RegistrationCreate(BaseModel):
     gender: Optional[str] = None
     dob: Optional[str] = None
     city: Optional[str] = None
+    address: Optional[str] = None
     education: Optional[str] = None
     occupation: Optional[str] = None
     gothram: Optional[str] = None
@@ -30,5 +31,7 @@ class RegistrationListItem(BaseModel):
     data: dict[str, Any]
     created_at: datetime = Field(serialization_alias="createdAt")
     status: str
+    is_active: bool = Field(serialization_alias="isActive")
+    credits: int
 
     model_config = ConfigDict(populate_by_name=True)

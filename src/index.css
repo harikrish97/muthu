@@ -643,6 +643,11 @@ a {
   padding-top: 36px;
 }
 
+.member-top-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .member-shell {
   max-width: 1200px;
   margin: 0 auto;
@@ -651,6 +656,97 @@ a {
   border-radius: 18px;
   padding: 24px;
   box-shadow: 0 28px 55px rgba(31, 24, 14, 0.14);
+}
+
+.member-profile-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: rgba(255, 253, 244, 0.9);
+  border: 1px solid rgba(15, 92, 92, 0.2);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 24px 48px rgba(31, 24, 14, 0.12);
+}
+
+.member-profile-banner {
+  background: linear-gradient(130deg, rgba(15, 92, 92, 0.15), rgba(212, 138, 10, 0.18));
+  border: 1px solid rgba(15, 92, 92, 0.15);
+  border-radius: 16px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+
+.member-profile-banner h2 {
+  font-family: var(--font-heading);
+  margin: 4px 0 6px;
+  color: #8f1c15;
+}
+
+.member-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.member-profile-grid label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.member-profile-item {
+  background: #fffdf7;
+  border: 1px solid rgba(99, 83, 51, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.member-profile-item span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.member-profile-item p {
+  margin-top: 4px;
+  font-weight: 600;
+  color: #243328;
+}
+
+.member-address-form {
+  display: grid;
+  gap: 12px;
+  background: #fffaf0;
+  border: 1px solid rgba(15, 92, 92, 0.14);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.member-address-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.member-address-form input,
+.member-address-form textarea {
+  border: 1px solid rgba(31, 24, 14, 0.18);
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  background: #ffffff;
+  color: #1d1b18;
+}
+
+.member-address-form input:focus,
+.member-address-form textarea:focus {
+  outline: none;
+  border-color: rgba(15, 92, 92, 0.5);
+  box-shadow: 0 0 0 3px rgba(15, 92, 92, 0.12);
 }
 
 .member-head {
@@ -960,9 +1056,18 @@ a {
     flex-direction: column;
   }
 
+  .member-top-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .member-stats {
     width: 100%;
     min-width: 0;
+  }
+
+  .member-profile-grid {
+    grid-template-columns: 1fr;
   }
 
   .member-table th,

@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/vedic_vivaha"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    admin_username: str = "admin"
+    admin_password: str = "admin123"
+    admin_token: str = "dev-admin-token-change-me"
+    enforce_credit_for_profile_access: bool = False
+    member_session_secret: str = "change-me-member-session-secret"
 
     model_config = SettingsConfigDict(
         env_file=".env",
