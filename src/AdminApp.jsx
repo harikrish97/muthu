@@ -15,9 +15,27 @@ const emptyEditForm = {
   occupation: "",
   gothram: "",
   message: "",
+  extraDataText: "{}",
   status: "New",
   isActive: true,
   credits: 0
+};
+
+const toReadableLabel = (key) =>
+  key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^./, (char) => char.toUpperCase());
+
+const formatExtraValue = (value) => {
+  if (value == null) return "";
+  if (typeof value === "object") {
+    if (value.fileName) return String(value.fileName);
+    return JSON.stringify(value);
+  }
+  return String(value);
 };
 
 const AdminApp = () => {
@@ -57,6 +75,15 @@ const AdminApp = () => {
     () => registrations.find((item) => item.memberId === selectedId) || null,
     [registrations, selectedId]
   );
+  const parsedExtraData = useMemo(() => {
+    try {
+      const parsed = JSON.parse(editForm.extraDataText || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      return parsed;
+    } catch (err) {
+      return {};
+    }
+  }, [editForm.extraDataText]);
 
   const updateSelectedUserForm = (user) => {
     if (!user) {
@@ -75,6 +102,7 @@ const AdminApp = () => {
       occupation: user.occupation || "",
       gothram: user.gothram || "",
       message: user.message || "",
+      extraDataText: JSON.stringify(user.extraData || {}, null, 2),
       status: user.status || "New",
       isActive: Boolean(user.isActive),
       credits: Number.isFinite(user.credits) ? user.credits : 0
@@ -161,10 +189,24 @@ const AdminApp = () => {
   };
 
   const handleSaveChanges = async (event) => {
-    event.preventDefault();
+    event?.preventDefault();
     if (!selectedId) return;
 
     setActionMessage("");
+    let parsedExtraData = {};
+    try {
+      parsedExtraData = editForm.extraDataText?.trim()
+        ? JSON.parse(editForm.extraDataText)
+        : {};
+      if (typeof parsedExtraData !== "object" || Array.isArray(parsedExtraData)) {
+        setActionMessage("Extra Data must be a valid JSON object.");
+        return;
+      }
+    } catch (err) {
+      setActionMessage("Extra Data JSON is invalid.");
+      return;
+    }
+
     const payload = {
       name: editForm.name,
       email: editForm.email,
@@ -177,6 +219,7 @@ const AdminApp = () => {
       occupation: editForm.occupation,
       gothram: editForm.gothram,
       message: editForm.message,
+      extraData: parsedExtraData,
       status: editForm.status,
       isActive: editForm.isActive,
       credits: editForm.credits
@@ -199,6 +242,11 @@ const AdminApp = () => {
     } catch (err) {
       setActionMessage(err.message);
     }
+  };
+
+  const updateExtraDataField = (key, value) => {
+    const next = { ...parsedExtraData, [key]: value };
+    setEditForm((current) => ({ ...current, extraDataText: JSON.stringify(next, null, 2) }));
   };
 
   const handleResetPassword = async (event) => {
@@ -439,7 +487,7 @@ const AdminApp = () => {
           style={{
             maxWidth: "1360px",
             marginTop: 0,
-            gridTemplateColumns: "minmax(0, 1.05fr) minmax(0, 0.95fr)",
+            gridTemplateColumns: "minmax(340px, 0.78fr) minmax(0, 1.22fr)",
             height: "calc(100vh - 220px)",
             minHeight: "520px"
           }}
@@ -516,20 +564,28 @@ const AdminApp = () => {
             </div>
           </div>
 
-          <div className="card" style={{ overflow: "hidden" }}>
+          <div className="card" style={{ display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
             <h3 style={{ marginBottom: "12px" }}>Edit User</h3>
-            {!selectedUser && <p className="form-note">Select a user from the table.</p>}
             {selectedUser && (
-              <>
-                <p className="form-note" style={{ marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", marginBottom: "10px", paddingRight: "6px" }}>
+                <p className="form-note" style={{ marginBottom: 0 }}>
                   Member: <strong>{selectedUser.memberId}</strong>
                 </p>
-                <form
-                  className="register-form"
-                  style={{ padding: 0, boxShadow: "none", gap: "10px" }}
-                  onSubmit={handleSaveChanges}
-                >
-                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
+                <button className="btn primary" type="button" onClick={handleSaveChanges}>
+                  Save Changes
+                </button>
+              </div>
+            )}
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingRight: "6px" }}>
+              {!selectedUser && <p className="form-note">Select a user from the table.</p>}
+              {selectedUser && (
+                <>
+                  <form
+                    className="register-form"
+                    style={{ padding: 0, boxShadow: "none", gap: "10px" }}
+                    onSubmit={handleSaveChanges}
+                  >
+                    <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
                     <label>
                       <span>Name</span>
                       <input
@@ -645,41 +701,67 @@ const AdminApp = () => {
                         onChange={(e) => setEditForm((cur) => ({ ...cur, message: e.target.value }))}
                       ></textarea>
                     </label>
-                  </div>
-                  <label style={{ maxWidth: "220px" }}>
-                    <span>Account State</span>
-                    <select
-                      value={editForm.isActive ? "active" : "inactive"}
-                      onChange={(e) =>
-                        setEditForm((cur) => ({ ...cur, isActive: e.target.value === "active" }))
-                      }
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </label>
-                  <button className="btn primary" type="submit">Save Changes</button>
-                </form>
+                    {Object.keys(parsedExtraData)
+                      .sort()
+                      .map((key) => {
+                        const value = parsedExtraData[key];
+                        const textValue = formatExtraValue(value);
+                        const isLong = textValue.length > 80 || key.toLowerCase().includes("details") || key.toLowerCase().includes("about");
+                        return (
+                          <label key={key}>
+                            <span>{toReadableLabel(key)}</span>
+                            {isLong ? (
+                              <textarea
+                                rows="2"
+                                value={textValue}
+                                onChange={(e) => updateExtraDataField(key, e.target.value)}
+                              ></textarea>
+                            ) : (
+                              <input
+                                type="text"
+                                value={textValue}
+                                onChange={(e) => updateExtraDataField(key, e.target.value)}
+                              />
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <label style={{ maxWidth: "220px" }}>
+                      <span>Account State</span>
+                      <select
+                        value={editForm.isActive ? "active" : "inactive"}
+                        onChange={(e) =>
+                          setEditForm((cur) => ({ ...cur, isActive: e.target.value === "active" }))
+                        }
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </label>
+                    <button className="btn primary" type="submit">Save Changes</button>
+                  </form>
 
-                <form className="login-form" style={{ marginTop: "16px" }} onSubmit={handleResetPassword}>
-                  <label>
-                    <span>Reset Password</span>
-                    <input
-                      type="password"
-                      placeholder="Enter new password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                    />
-                  </label>
-                  <button className="btn ghost" type="submit">Reset Password</button>
-                </form>
-              </>
-            )}
-            {actionMessage && (
-              <p className={`form-message ${actionMessage.toLowerCase().includes("successful") ? "success" : "error"}`}>
-                {actionMessage}
-              </p>
-            )}
+                  <form className="login-form" style={{ marginTop: "16px" }} onSubmit={handleResetPassword}>
+                    <label>
+                      <span>Reset Password</span>
+                      <input
+                        type="password"
+                        placeholder="Enter new password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                    </label>
+                    <button className="btn ghost" type="submit">Reset Password</button>
+                  </form>
+                </>
+              )}
+              {actionMessage && (
+                <p className={`form-message ${actionMessage.toLowerCase().includes("successful") ? "success" : "error"}`}>
+                  {actionMessage}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </section>

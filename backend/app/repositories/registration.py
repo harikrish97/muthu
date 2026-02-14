@@ -174,16 +174,31 @@ def update_registration_address(db: Session, registration: Registration, address
 def update_registration_member_fields(
     db: Session,
     registration: Registration,
+    city: Optional[str] = None,
     address: Optional[str] = None,
+    education: Optional[str] = None,
+    gothram: Optional[str] = None,
     occupation: Optional[str] = None,
     message: Optional[str] = None,
+    extra_data: Optional[dict] = None,
 ) -> Registration:
+    if city is not None:
+        registration.city = city
     if address is not None:
         registration.address = address
+    if education is not None:
+        registration.education = education
+    if gothram is not None:
+        registration.gothram = gothram
     if occupation is not None:
         registration.occupation = occupation
     if message is not None:
         registration.message = message
+    if extra_data is not None:
+        registration.extra_data = {
+            **(registration.extra_data or {}),
+            **extra_data,
+        }
 
     db.add(registration)
     db.commit()

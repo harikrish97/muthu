@@ -1,6 +1,177 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./lib/api";
 
+const SALARY_CURRENCY_OPTIONS = [
+  "INR - Indian Rupee",
+  "USD - US Dollar",
+  "EUR - Euro",
+  "GBP - British Pound",
+  "AED - UAE Dirham",
+  "SGD - Singapore Dollar",
+  "AUD - Australian Dollar"
+];
+
+const PARENTS_STATUS_OPTIONS = [
+  "Both Alive",
+  "Father Alive",
+  "Mother Alive",
+  "Both Deceased"
+];
+
+const EXCLUDED_ADDITIONAL_DETAIL_KEYS = new Set([
+  "profilePhoto",
+  "governmentProofFile",
+  "doctorCertificateFile",
+  "governmentProofType",
+  "referralCode",
+  "policyAcknowledged",
+  "free_registration",
+  "confirmPassword",
+  "password",
+  "aboutMe",
+  "familyPropertyDetails"
+]);
+
+const ADDITIONAL_DETAIL_GROUPS = [
+  {
+    title: "Horoscope",
+    keys: ["rasi", "nakshatra", "sect", "subsect", "horoscopeMatchingRequired", "timeOfBirth", "placeOfBirth"]
+  },
+  {
+    title: "Personal",
+    keys: [
+      "maritalStatus",
+      "height",
+      "weight",
+      "complexion",
+      "motherTongue",
+      "otherLanguages",
+      "nativePlace",
+      "currentLocation",
+      "drivingSkills",
+      "disability"
+    ]
+  },
+  {
+    title: "Education & Career",
+    keys: [
+      "highestQualification",
+      "fieldOfStudy",
+      "companyName",
+      "workLocation",
+      "salaryCurrency",
+      "salary",
+      "natureOfWork",
+      "visaStatus"
+    ]
+  },
+  {
+    title: "Family",
+    keys: [
+      "fatherName",
+      "fatherOccupation",
+      "motherName",
+      "motherOccupation",
+      "parentsStatus",
+      "siblingsDetails",
+      "familyStatus"
+    ]
+  },
+  {
+    title: "Partner Preferences",
+    keys: [
+      "preferredQualification",
+      "preferredOccupation",
+      "preferredLocation",
+      "expectedIncomeCurrency",
+      "expectedIncomeRange",
+      "ageDifferencePreferred",
+      "heightPreference",
+      "partnerSectPreference",
+      "partnerSubsectPreference",
+      "additionalExpectations"
+    ]
+  }
+];
+
+const FIELD_LABELS = {
+  whatsappNumber: "WhatsApp Number",
+  alternateContactNumber: "Alternate Contact Number",
+  primaryContactName: "Primary Contact Name",
+  primaryContactRelation: "Primary Contact Relation",
+  timeOfBirth: "Time of Birth",
+  placeOfBirth: "Place of Birth",
+  maritalStatus: "Marital Status",
+  motherTongue: "Mother Tongue",
+  otherLanguages: "Other Languages",
+  nativePlace: "Native Place",
+  currentLocation: "Current Location",
+  horoscopeMatchingRequired: "Horoscope Matching Required",
+  highestQualification: "Highest Qualification",
+  fieldOfStudy: "Field of Study",
+  workLocation: "Work Location",
+  salaryCurrency: "Salary Currency",
+  natureOfWork: "Nature of Work",
+  visaStatus: "Visa Status",
+  fatherName: "Father Name",
+  fatherOccupation: "Father Occupation",
+  motherName: "Mother Name",
+  motherOccupation: "Mother Occupation",
+  parentsStatus: "Parents Status",
+  siblingsDetails: "Siblings Details",
+  familyStatus: "Family Status",
+  familyPropertyDetails: "Family Property Details",
+  drivingSkills: "Driving Skills",
+  preferredQualification: "Preferred Qualification",
+  preferredOccupation: "Preferred Occupation",
+  preferredLocation: "Preferred Location",
+  expectedIncomeCurrency: "Expected Income Currency",
+  expectedIncomeRange: "Expected Income Range",
+  ageDifferencePreferred: "Age Difference Preferred",
+  heightPreference: "Height Preference",
+  partnerSectPreference: "Partner Sect Preference",
+  partnerSubsectPreference: "Partner Subsect Preference",
+  additionalExpectations: "Additional Expectations"
+};
+
+const toLabel = (key) => FIELD_LABELS[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+
+const hasUsefulValue = (value) => {
+  if (value === null || value === undefined) return false;
+  const text = String(value).trim();
+  if (!text) return false;
+  if (text === "-") return false;
+  return true;
+};
+
+const isSameText = (a, b) =>
+  String(a || "").trim().toLowerCase() !== "" &&
+  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+
+const getGroupedAdditionalDetails = (additionalData = {}) => {
+  const groups = [];
+
+  for (const group of ADDITIONAL_DETAIL_GROUPS) {
+    const rows = group.keys
+      .filter((key) => !EXCLUDED_ADDITIONAL_DETAIL_KEYS.has(key))
+      .map((key) => ({ key, value: additionalData[key] }))
+      .filter(({ value }) => hasUsefulValue(value))
+      .map(({ key, value }) => ({ label: toLabel(key), value: String(value) }));
+    if (rows.length > 0) groups.push({ title: group.title, rows });
+  }
+
+  const remainingRows = Object.entries(additionalData)
+    .filter(([key, value]) => !EXCLUDED_ADDITIONAL_DETAIL_KEYS.has(key) && hasUsefulValue(value))
+    .filter(([key]) => !ADDITIONAL_DETAIL_GROUPS.some((group) => group.keys.includes(key)))
+    .map(([key, value]) => ({ label: toLabel(key), value: String(value) }));
+
+  if (remainingRows.length > 0) {
+    groups.push({ title: "Other Relevant Details", rows: remainingRows });
+  }
+
+  return groups;
+};
+
 const App = () => {
   const [loginMessage, setLoginMessage] = useState("");
   const [loginError, setLoginError] = useState(false);
@@ -17,15 +188,35 @@ const App = () => {
   const [selectedProfileLoading, setSelectedProfileLoading] = useState(false);
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
-  const [addressDraft, setAddressDraft] = useState("");
-  const [occupationDraft, setOccupationDraft] = useState("");
-  const [messageDraft, setMessageDraft] = useState("");
+  const [profileDraft, setProfileDraft] = useState({
+    city: "",
+    address: "",
+    education: "",
+    occupation: "",
+    gothram: "",
+    message: "",
+    extraData: {}
+  });
   const [addressMessage, setAddressMessage] = useState("");
   const [addressError, setAddressError] = useState(false);
+  const [passwordDraft, setPasswordDraft] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState(false);
 
   const handleSubmit = (event) => {
     event.preventDefault();
   };
+
+  const buildProfileDraft = (member = {}) => ({
+    address: member?.address || "",
+    occupation: member?.occupation || "",
+    message: member?.message || "",
+    extraData: { ...(member?.extraData || {}) }
+  });
 
   useEffect(() => {
     const saved = sessionStorage.getItem("vv_member_session");
@@ -34,9 +225,7 @@ const App = () => {
       const parsed = JSON.parse(saved);
       setMemberSession(parsed);
       setMemberView("matches");
-      setAddressDraft(parsed?.member?.address || "");
-      setOccupationDraft(parsed?.member?.occupation || "");
-      setMessageDraft(parsed?.member?.message || "");
+      setProfileDraft(buildProfileDraft(parsed?.member));
     } catch (err) {
       sessionStorage.removeItem("vv_member_session");
     }
@@ -54,9 +243,7 @@ const App = () => {
         }
       });
       setMemberSession(latest);
-      setAddressDraft(latest?.member?.address || "");
-      setOccupationDraft(latest?.member?.occupation || "");
-      setMessageDraft(latest?.member?.message || "");
+      setProfileDraft(buildProfileDraft(latest?.member));
       return true;
     } catch (err) {
       sessionStorage.removeItem("vv_member_session");
@@ -119,9 +306,7 @@ const App = () => {
       setMemberSession(body);
       setMemberView("matches");
       setProfilesPage(1);
-      setAddressDraft(body?.member?.address || "");
-      setOccupationDraft(body?.member?.occupation || "");
-      setMessageDraft(body?.member?.message || "");
+      setProfileDraft(buildProfileDraft(body?.member));
       setLoginMessage("Login successful");
       form.reset();
     } catch (err) {
@@ -135,11 +320,12 @@ const App = () => {
     setMemberView("matches");
     setLoginError(false);
     setLoginMessage("");
-    setAddressDraft("");
-    setOccupationDraft("");
-    setMessageDraft("");
+    setProfileDraft(buildProfileDraft({}));
     setAddressMessage("");
     setAddressError(false);
+    setPasswordDraft({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    setPasswordMessage("");
+    setPasswordError(false);
     setRecentProfiles([]);
     setProfilesTotal(0);
     setProfilesPage(1);
@@ -163,22 +349,69 @@ const App = () => {
           Authorization: `Bearer ${memberSession.token}`
         },
         body: JSON.stringify({
-          address: addressDraft,
-          occupation: occupationDraft,
-          message: messageDraft
+          address: profileDraft.address,
+          occupation: profileDraft.occupation,
+          message: profileDraft.message,
+          extraData: profileDraft.extraData
         })
       });
-      setMemberSession((current) => ({
-        ...current,
-        member: {
-          ...current.member,
-          ...updatedMember
-        }
-      }));
+      setMemberSession((current) => {
+        const next = {
+          ...current,
+          member: {
+            ...current.member,
+            ...updatedMember
+          }
+        };
+        setProfileDraft(buildProfileDraft(next.member));
+        return next;
+      });
       setAddressMessage("Profile updated successfully.");
     } catch (err) {
       setAddressError(true);
       setAddressMessage(err.message);
+    }
+  };
+
+  const handlePasswordUpdate = async (event) => {
+    event.preventDefault();
+    if (!memberSession?.token) return;
+
+    setPasswordMessage("");
+    setPasswordError(false);
+    if (!passwordDraft.currentPassword || !passwordDraft.newPassword || !passwordDraft.confirmPassword) {
+      setPasswordError(true);
+      setPasswordMessage("Please fill all password fields.");
+      return;
+    }
+    if (passwordDraft.newPassword.length < 4) {
+      setPasswordError(true);
+      setPasswordMessage("New password must be at least 4 characters.");
+      return;
+    }
+    if (passwordDraft.newPassword !== passwordDraft.confirmPassword) {
+      setPasswordError(true);
+      setPasswordMessage("New password and confirm password do not match.");
+      return;
+    }
+
+    try {
+      const response = await apiFetch("/member-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${memberSession.token}`
+        },
+        body: JSON.stringify({
+          currentPassword: passwordDraft.currentPassword,
+          newPassword: passwordDraft.newPassword
+        })
+      });
+      setPasswordMessage(response.message || "Password updated successfully.");
+      setPasswordDraft({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      setPasswordError(true);
+      setPasswordMessage(err.message);
     }
   };
 
@@ -314,7 +547,11 @@ const App = () => {
               <div>
                 <p className="brand-name">Vedic Vivaha</p>
                 <p className="brand-tag">
-                  {memberView === "profile" ? "My Profile" : "Member Profile List"}
+                  {memberView === "profile"
+                    ? "My Profile"
+                    : memberView === "password"
+                      ? "Reset Password"
+                      : "Member Profile List"}
                 </p>
               </div>
             </div>
@@ -350,11 +587,23 @@ const App = () => {
             <div className="member-profile-shell reveal">
               {memberLoading && <p className="form-note" style={{ marginBottom: "10px" }}>Loading profile...</p>}
               <div className="member-profile-banner">
-                <p className="eyebrow">My Profile</p>
-                <h2>{memberSession.member?.name}</h2>
-                <p>
-                  Member ID: <strong>{memberSession.member?.id}</strong>
-                </p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
+                  <div>
+                    <p className="eyebrow">My Profile</p>
+                    <h2>{memberSession.member?.name}</h2>
+                    <p>
+                      Member ID: <strong>{memberSession.member?.id}</strong>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMemberView("password")}
+                    className="btn ghost"
+                    style={{ padding: "6px 10px", fontSize: "12px", lineHeight: 1.2, minWidth: "auto" }}
+                  >
+                    Reset Password
+                  </button>
+                </div>
               </div>
               <div className="member-profile-grid">
                 <div className="member-profile-item"><span>Name</span><p>{memberSession.member?.name || "-"}</p></div>
@@ -362,45 +611,316 @@ const App = () => {
                 <div className="member-profile-item"><span>Phone</span><p>{memberSession.member?.phone || "-"}</p></div>
                 <div className="member-profile-item"><span>Gender</span><p>{memberSession.member?.gender || "-"}</p></div>
                 <div className="member-profile-item"><span>Date of Birth</span><p>{memberSession.member?.dob || "-"}</p></div>
-                <div className="member-profile-item"><span>City</span><p>{memberSession.member?.city || "-"}</p></div>
-                <div className="member-profile-item"><span>Education</span><p>{memberSession.member?.education || "-"}</p></div>
-                <div className="member-profile-item"><span>Gothram</span><p>{memberSession.member?.gothram || "-"}</p></div>
+                <div className="member-profile-item"><span>Height</span><p>{memberSession.member?.extraData?.height || "-"}</p></div>
+                <div className="member-profile-item"><span>Parents Name</span><p>{`${memberSession.member?.extraData?.fatherName || "-"} / ${memberSession.member?.extraData?.motherName || "-"}`}</p></div>
+                <div className="member-profile-item"><span>Siblings</span><p>{memberSession.member?.extraData?.siblingsDetails || "-"}</p></div>
                 <div className="member-profile-item"><span>Credits</span><p>{memberSession.member?.credits ?? 0}</p></div>
               </div>
               <form className="member-address-form" onSubmit={handleProfileUpdate}>
-                <label>
-                  <span>Occupation (Editable)</span>
-                  <input
-                    type="text"
-                    value={occupationDraft}
-                    onChange={(e) => setOccupationDraft(e.target.value)}
-                    placeholder="Enter your occupation"
-                  />
-                </label>
-                <label>
-                  <span>Message (Editable)</span>
-                  <textarea
-                    rows="3"
-                    value={messageDraft}
-                    onChange={(e) => setMessageDraft(e.target.value)}
-                    placeholder="Enter your message"
-                  ></textarea>
-                </label>
-                <label>
-                  <span>Address (Editable)</span>
-                  <textarea
-                    rows="4"
-                    value={addressDraft}
-                    onChange={(e) => setAddressDraft(e.target.value)}
-                    placeholder="Enter your address"
-                  ></textarea>
-                </label>
+                <div className="member-edit-grid">
+                  <label>
+                    <span>Occupation (Editable)</span>
+                    <input
+                      type="text"
+                      value={profileDraft.occupation}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({ ...current, occupation: e.target.value }))
+                      }
+                      placeholder="Enter your occupation"
+                    />
+                  </label>
+                  <label>
+                    <span>Current Location (Editable)</span>
+                    <input
+                      type="text"
+                      value={String(profileDraft.extraData?.currentLocation || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            currentLocation: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter current location"
+                    />
+                  </label>
+                  <label>
+                    <span>Work Location (Editable)</span>
+                    <input
+                      type="text"
+                      value={String(profileDraft.extraData?.workLocation || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            workLocation: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter work location"
+                    />
+                  </label>
+
+                  <label>
+                    <span>Salary Currency (Editable)</span>
+                    <select
+                      value={String(profileDraft.extraData?.salaryCurrency || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            salaryCurrency: e.target.value
+                          }
+                        }))
+                      }
+                    >
+                      <option value="">Select</option>
+                      {SALARY_CURRENCY_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Salary (Editable)</span>
+                    <input
+                      type="text"
+                      value={String(profileDraft.extraData?.salary || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            salary: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter salary"
+                    />
+                  </label>
+                  <label>
+                    <span>Expected Income Currency (Editable)</span>
+                    <select
+                      value={String(profileDraft.extraData?.expectedIncomeCurrency || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            expectedIncomeCurrency: e.target.value
+                          }
+                        }))
+                      }
+                    >
+                      <option value="">Select</option>
+                      {SALARY_CURRENCY_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Expected Income Range (Editable)</span>
+                    <input
+                      type="text"
+                      value={String(profileDraft.extraData?.expectedIncomeRange || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            expectedIncomeRange: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter expected income range"
+                    />
+                  </label>
+                  <label>
+                    <span>Parents Status (Editable)</span>
+                    <select
+                      value={String(profileDraft.extraData?.parentsStatus || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            parentsStatus: e.target.value
+                          }
+                        }))
+                      }
+                    >
+                      <option value="">Select</option>
+                      {PARENTS_STATUS_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Visa Status (Editable)</span>
+                    <input
+                      type="text"
+                      value={String(profileDraft.extraData?.visaStatus || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            visaStatus: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter visa status"
+                    />
+                  </label>
+
+                  <label>
+                    <span>Company Name (Editable)</span>
+                    <input
+                      type="text"
+                      value={String(profileDraft.extraData?.companyName || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            companyName: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter company name"
+                    />
+                  </label>
+                  <label>
+                    <span>Nature of Work (Editable)</span>
+                    <input
+                      type="text"
+                      value={String(profileDraft.extraData?.natureOfWork || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            natureOfWork: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter nature of work"
+                    />
+                  </label>
+                  <label className="member-edit-full">
+                    <span>Address (Editable)</span>
+                    <textarea
+                      rows="3"
+                      value={profileDraft.address}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({ ...current, address: e.target.value }))
+                      }
+                      placeholder="Enter your address"
+                    ></textarea>
+                  </label>
+                  <label className="member-edit-full">
+                    <span>Message (Editable)</span>
+                    <textarea
+                      rows="3"
+                      value={profileDraft.message}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({ ...current, message: e.target.value }))
+                      }
+                      placeholder="Enter your message"
+                    ></textarea>
+                  </label>
+                  <label className="member-edit-full">
+                    <span>Additional Expectations (Editable)</span>
+                    <textarea
+                      rows="3"
+                      value={String(profileDraft.extraData?.additionalExpectations || "")}
+                      onChange={(e) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          extraData: {
+                            ...(current.extraData || {}),
+                            additionalExpectations: e.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Enter additional expectations"
+                    ></textarea>
+                  </label>
+                </div>
                 {addressMessage && (
                   <p className={`form-message ${addressError ? "error" : "success"}`}>
                     {addressMessage}
                   </p>
                 )}
                 <button className="btn primary" type="submit">Update Profile</button>
+              </form>
+            </div>
+          </section>
+        ) : memberView === "password" ? (
+          <section className="section member-section">
+            <div className="member-profile-shell reveal" style={{ maxWidth: "760px" }}>
+              <div className="member-profile-banner" style={{ marginBottom: "14px" }}>
+                <p className="eyebrow">Reset Password</p>
+                <h2>{memberSession.member?.name}</h2>
+                <p>
+                  Member ID: <strong>{memberSession.member?.id}</strong>
+                </p>
+              </div>
+              <form className="member-address-form" onSubmit={handlePasswordUpdate}>
+                <label>
+                  <span>Current Password</span>
+                  <input
+                    type="password"
+                    value={passwordDraft.currentPassword}
+                    onChange={(e) =>
+                      setPasswordDraft((current) => ({ ...current, currentPassword: e.target.value }))
+                    }
+                    placeholder="Enter current password"
+                  />
+                </label>
+                <label>
+                  <span>New Password</span>
+                  <input
+                    type="password"
+                    value={passwordDraft.newPassword}
+                    onChange={(e) =>
+                      setPasswordDraft((current) => ({ ...current, newPassword: e.target.value }))
+                    }
+                    placeholder="Enter new password"
+                  />
+                </label>
+                <label>
+                  <span>Confirm New Password</span>
+                  <input
+                    type="password"
+                    value={passwordDraft.confirmPassword}
+                    onChange={(e) =>
+                      setPasswordDraft((current) => ({ ...current, confirmPassword: e.target.value }))
+                    }
+                    placeholder="Re-enter new password"
+                  />
+                </label>
+                {passwordMessage && (
+                  <p className={`form-message ${passwordError ? "error" : "success"}`}>
+                    {passwordMessage}
+                  </p>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
+                  <button className="btn ghost" type="button" onClick={() => setMemberView("profile")}>
+                    Back to Profile
+                  </button>
+                  <button className="btn primary" type="submit">Update Password</button>
+                </div>
               </form>
             </div>
           </section>
@@ -439,18 +959,83 @@ const App = () => {
                     <div className="member-profile-item"><span>Gender</span><p>{selectedProfile.profile.gender || "-"}</p></div>
                     <div className="member-profile-item"><span>Height</span><p>{selectedProfile.profile.height || "-"}</p></div>
                     <div className="member-profile-item"><span>Star / Padham</span><p>{selectedProfile.profile.starPadham || "-"}</p></div>
+                    <div className="member-profile-item"><span>Rasi</span><p>{selectedProfile.profile.rasi || "-"}</p></div>
+                    <div className="member-profile-item"><span>Nakshatra</span><p>{selectedProfile.profile.nakshatra || "-"}</p></div>
+                    <div className="member-profile-item"><span>Sect</span><p>{selectedProfile.profile.sect || "-"}</p></div>
+                    <div className="member-profile-item"><span>Subsect</span><p>{selectedProfile.profile.subsect || "-"}</p></div>
+                    <div className="member-profile-item"><span>Horoscope Matching</span><p>{selectedProfile.profile.horoscopeMatchingRequired || "-"}</p></div>
                     <div className="member-profile-item"><span>Education</span><p>{selectedProfile.profile.education || "-"}</p></div>
                     <div className="member-profile-item"><span>Occupation</span><p>{selectedProfile.profile.occupation || "-"}</p></div>
                     <div className="member-profile-item"><span>Photo</span><p>{selectedProfile.profile.hasPhoto ? "Available" : "Not Available"}</p></div>
                   </div>
 
                   {selectedProfile.fullDetails ? (
-                    <div className="card" style={{ marginTop: "14px" }}>
-                      <h3 style={{ marginBottom: "8px" }}>Full Details</h3>
-                      <p><strong>About:</strong> {selectedProfile.fullDetails.about || "-"}</p>
-                      <p style={{ marginTop: "8px" }}>
-                        <strong>Family Details:</strong> {selectedProfile.fullDetails.familyDetails || "-"}
-                      </p>
+                    <div className="card full-detail-card" style={{ marginTop: "14px" }}>
+                      <h3 style={{ marginBottom: "10px" }}>Full Details</h3>
+                      <div className="full-detail-sections">
+                        <section className="full-detail-section">
+                          <h4>Contact</h4>
+                          <table className="profile-detail-table">
+                            <tbody>
+                              <tr><th>Phone</th><td>{selectedProfile.fullDetails.phone || "-"}</td></tr>
+                              <tr><th>Email</th><td>{selectedProfile.fullDetails.email || "-"}</td></tr>
+                            </tbody>
+                          </table>
+                        </section>
+                        <section className="full-detail-section">
+                          <h4>Personal</h4>
+                          <table className="profile-detail-table">
+                            <tbody>
+                              <tr><th>Date of Birth</th><td>{selectedProfile.fullDetails.dob || "-"}</td></tr>
+                              <tr><th>City</th><td>{selectedProfile.fullDetails.city || "-"}</td></tr>
+                              <tr><th>Address</th><td>{selectedProfile.fullDetails.address || "-"}</td></tr>
+                              <tr><th>Education</th><td>{selectedProfile.fullDetails.education || "-"}</td></tr>
+                              <tr><th>Occupation</th><td>{selectedProfile.fullDetails.occupation || "-"}</td></tr>
+                              <tr><th>Gothram</th><td>{selectedProfile.fullDetails.gothram || "-"}</td></tr>
+                            </tbody>
+                          </table>
+                        </section>
+                        <section className="full-detail-section">
+                          <h4>About & Family</h4>
+                          <table className="profile-detail-table">
+                            <tbody>
+                              <tr><th>About</th><td>{selectedProfile.fullDetails.about || "-"}</td></tr>
+                              {!isSameText(
+                                selectedProfile.fullDetails.familyDetails,
+                                selectedProfile.fullDetails.address
+                              ) && (
+                                <tr><th>Family Details</th><td>{selectedProfile.fullDetails.familyDetails || "-"}</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </section>
+                        {(() => {
+                          const groups = getGroupedAdditionalDetails(selectedProfile.fullDetails.additionalData || {});
+                          if (groups.length === 0) return null;
+                          return (
+                            <section className="full-detail-section">
+                              <h4>Additional Details</h4>
+                              <div className="additional-groups-grid">
+                                {groups.map((group) => (
+                                  <div key={group.title} className="additional-group-card">
+                                    <h5>{group.title}</h5>
+                                    <table className="profile-detail-table">
+                                      <tbody>
+                                        {group.rows.map((row) => (
+                                          <tr key={`${group.title}-${row.label}`}>
+                                            <th>{row.label}</th>
+                                            <td>{row.value}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ))}
+                              </div>
+                            </section>
+                          );
+                        })()}
+                      </div>
                     </div>
                   ) : (
                     <div className="card" style={{ marginTop: "14px" }}>
@@ -520,6 +1105,7 @@ const App = () => {
                       <div className="recent-profile-content">
                         <h3>{profile.name}</h3>
                         <p>{profile.age || "-"} yrs · {profile.city || "-"}</p>
+                        <p>{profile.height || "-"} · {profile.starPadham || "-"}</p>
                         <p>{profile.education || "-"}</p>
                         <p>{profile.occupation || "-"}</p>
                         <span className={profile.unlocked ? "unlock-pill yes" : "unlock-pill no"}>

@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Optional
 
 
 class MemberLoginRequest(BaseModel):
@@ -20,6 +20,7 @@ class MemberIdentity(BaseModel):
     occupation: Optional[str] = None
     message: Optional[str] = None
     gothram: Optional[str] = None
+    extraData: dict[str, Any] = Field(default_factory=dict)
     isActive: bool
     credits: int
 
@@ -45,5 +46,13 @@ class MemberProfileUpdateRequest(BaseModel):
     address: Optional[str] = None
     occupation: Optional[str] = None
     message: Optional[str] = None
+    extraData: Optional[dict[str, Any]] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MemberChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
 
     model_config = ConfigDict(extra="forbid")

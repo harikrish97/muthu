@@ -158,12 +158,79 @@ const validateUpload = (file, fieldName) => {
   return "";
 };
 
+const REGISTRATION_STEPS = [
+  {
+    title: "Personal Information",
+    fields: [
+      "name",
+      "email",
+      "phone",
+      "whatsappNumber",
+      "alternateContactNumber",
+      "password",
+      "confirmPassword",
+      "primaryContactName",
+      "primaryContactRelation",
+      "gender",
+      "dob",
+      "maritalStatus",
+      "height",
+      "motherTongue",
+      "currentLocation",
+      "profilePhoto"
+    ]
+  },
+  {
+    title: "Horoscope Details",
+    fields: ["nakshatra", "sect", "subsect", "horoscopeMatchingRequired", "horoscopeFile"]
+  },
+  {
+    title: "Education & Career",
+    fields: ["highestQualification", "occupation", "salaryCurrency", "salary", "natureOfWork"]
+  },
+  {
+    title: "Family Details",
+    fields: ["fatherName", "motherName", "parentsStatus", "familyStatus"]
+  },
+  {
+    title: "Lifestyle Details",
+    fields: ["drivingSkills", "aboutMe"]
+  },
+  {
+    title: "Disability Information",
+    fields: ["disability", "disabilityType", "disabilityPercentage", "doctorCertificateFile"]
+  },
+  {
+    title: "Partner Expectations",
+    fields: [
+      "preferredQualification",
+      "preferredOccupation",
+      "preferredLocation",
+      "ageDifferencePreferred"
+    ]
+  },
+  {
+    title: "Verification Documents",
+    fields: ["governmentProofType", "governmentProofFile"]
+  },
+  {
+    title: "Referral",
+    fields: ["referralCode"]
+  }
+];
+
+const SUMMARY_STEP_TITLE = "Summary";
+const SUMMARY_STEP_INDEX = REGISTRATION_STEPS.length;
+
 const RegisterApp = () => {
   const [disability, setDisability] = useState("");
   const [sect, setSect] = useState("");
   const [subsect, setSubsect] = useState("");
   const [partnerSectPreference, setPartnerSectPreference] = useState("");
   const [partnerSubsectPreference, setPartnerSubsectPreference] = useState("");
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState({});
+  const [summaryData, setSummaryData] = useState({});
   const [referralFeedback, setReferralFeedback] = useState({ status: "idle", message: "" });
   const [formMessage, setFormMessage] = useState("");
   const [formError, setFormError] = useState(false);
@@ -173,6 +240,7 @@ const RegisterApp = () => {
   const [horoscopeFileName, setHoroscopeFileName] = useState("");
   const [governmentProofFileName, setGovernmentProofFileName] = useState("");
   const [doctorCertificateFileName, setDoctorCertificateFileName] = useState("");
+  const formRef = useRef(null);
   const referralInputRef = useRef(null);
 
   const clearFieldError = (fieldName) => {
@@ -308,17 +376,21 @@ const RegisterApp = () => {
     });
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setFormMessage("");
-    setFormError(false);
-
-    const form = event.currentTarget;
-    if (!form.reportValidity()) {
-      return;
+  const buildSummaryData = (formElement) => {
+    if (!formElement) return {};
+    const formData = new FormData(formElement);
+    const values = {};
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        values[key] = value.size > 0 ? value.name : "";
+      } else {
+        values[key] = String(value || "").trim();
+      }
     }
+    return values;
+  };
 
-    const formData = new FormData(form);
+  const validateFormData = (formData, stepIndex = null) => {
     const nextErrors = {};
 
     const password = String(formData.get("password") || "").trim();
@@ -395,15 +467,127 @@ const RegisterApp = () => {
       if (doctorCertificateError) {
         nextErrors.doctorCertificateFile = doctorCertificateError;
       }
-      formData.set("free_registration", "true");
-    } else {
-      formData.delete("free_registration");
     }
 
     const sectValue = String(formData.get("sect") || "").trim();
     const subsectValue = String(formData.get("subsect") || "").trim();
     if (sectValue && !subsectValue) {
       nextErrors.subsect = "Please select a subsect.";
+    }
+
+    const referralCheck = evaluateReferralCode(formData.get("referralCode"));
+    if (!referralCheck.valid) {
+      nextErrors.referralCode = referralCheck.message;
+    }
+
+    const policyAcknowledged = String(formData.get("policyAcknowledged") || "").trim();
+    if (!policyAcknowledged) {
+      nextErrors.policyAcknowledged = "Please acknowledge the policies before submitting.";
+    }
+
+    if (stepIndex === null) {
+      return nextErrors;
+    }
+
+    if (stepIndex === SUMMARY_STEP_INDEX) {
+      return nextErrors;
+    }
+
+    const allowedFields = new Set(REGISTRATION_STEPS[stepIndex]?.fields || []);
+    return Object.fromEntries(
+      Object.entries(nextErrors).filter(([fieldName]) => allowedFields.has(fieldName))
+    );
+  };
+
+  const validateCurrentStep = (stepIndex) => {
+    const formElement = formRef.current;
+    if (!formElement) return false;
+
+    const sectionElement = formElement.querySelector(`[data-step="${stepIndex}"]`);
+    if (!sectionElement) return false;
+
+    const controls = Array.from(sectionElement.querySelectorAll("input, select, textarea")).filter(
+      (element) => element.willValidate && !element.disabled
+    );
+
+    for (const control of controls) {
+      if (!control.checkValidity()) {
+        control.reportValidity();
+        return false;
+      }
+    }
+
+    const formData = new FormData(formElement);
+    const stepErrors = validateFormData(formData, stepIndex);
+    if (Object.keys(stepErrors).length > 0) {
+      setFieldErrors((current) => ({ ...current, ...stepErrors }));
+      setFormError(true);
+      setFormMessage("Please correct the highlighted fields and continue.");
+      return false;
+    }
+
+    setFormError(false);
+    setFormMessage("");
+    return true;
+  };
+
+  const canNavigateToStep = (targetStep) => {
+    if (targetStep <= currentStep) return true;
+    for (let index = 0; index < targetStep; index += 1) {
+      if (!completedSteps[index]) return false;
+    }
+    return true;
+  };
+
+  const openStep = (targetStep) => {
+    if (!canNavigateToStep(targetStep)) return;
+    if (targetStep === SUMMARY_STEP_INDEX) {
+      setSummaryData(buildSummaryData(formRef.current));
+    }
+    setCurrentStep(targetStep);
+    setFormMessage("");
+    setFormError(false);
+  };
+
+  const handleNextStep = () => {
+    if (currentStep >= SUMMARY_STEP_INDEX) return;
+    if (!validateCurrentStep(currentStep)) return;
+
+    setCompletedSteps((current) => ({ ...current, [currentStep]: true }));
+    const nextStep = currentStep + 1;
+    if (nextStep === SUMMARY_STEP_INDEX) {
+      setSummaryData(buildSummaryData(formRef.current));
+    }
+    setCurrentStep(nextStep);
+  };
+
+  const handleBackStep = () => {
+    if (currentStep <= 0) return;
+    setCurrentStep((value) => value - 1);
+    setFormMessage("");
+    setFormError(false);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormMessage("");
+    setFormError(false);
+
+    const form = event.currentTarget;
+    if (currentStep !== SUMMARY_STEP_INDEX) {
+      return;
+    }
+    if (!form.reportValidity()) {
+      return;
+    }
+
+    const formData = new FormData(form);
+    const nextErrors = validateFormData(formData);
+    const disabilityValue = String(formData.get("disability") || "").trim();
+    if (disabilityValue === "Yes") {
+      formData.set("free_registration", "true");
+    } else {
+      formData.delete("free_registration");
     }
 
     const referralCheck = evaluateReferralCode(formData.get("referralCode"));
@@ -468,6 +652,9 @@ const RegisterApp = () => {
       setPartnerSectPreference("");
       setPartnerSubsectPreference("");
       setReferralFeedback({ status: "idle", message: "" });
+      setCurrentStep(0);
+      setCompletedSteps({});
+      setSummaryData({});
       form.reset();
     } catch (err) {
       setFormError(true);
@@ -512,8 +699,53 @@ const RegisterApp = () => {
       </section>
 
       <main className="register-main">
-        <form className="registration-form" onSubmit={handleSubmit} onInput={handleInput} noValidate>
-          <section className="registration-group">
+        <form
+          ref={formRef}
+          className="registration-form"
+          onSubmit={handleSubmit}
+          onInput={handleInput}
+          noValidate
+        >
+          <div className="registration-stepper">
+            <div className="registration-stepper-track">
+              <div
+                className="registration-stepper-progress"
+                style={{
+                  width: `${Math.round((currentStep / SUMMARY_STEP_INDEX) * 100)}%`
+                }}
+              />
+            </div>
+            <div className="registration-stepper-points">
+              {REGISTRATION_STEPS.map((step, index) => {
+                const isCompleted = Boolean(completedSteps[index]);
+                const isActive = index === currentStep;
+                const isLocked = !canNavigateToStep(index);
+                return (
+                  <button
+                    key={step.title}
+                    type="button"
+                    className={`step-point ${isCompleted ? "done" : ""} ${isActive ? "active" : ""}`}
+                    onClick={() => openStep(index)}
+                    disabled={isLocked}
+                  >
+                    <span className="step-dot">{isCompleted ? "✓" : index + 1}</span>
+                    <span className="step-text">{step.title}</span>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className={`step-point ${currentStep === SUMMARY_STEP_INDEX ? "active" : ""}`}
+                onClick={() => openStep(SUMMARY_STEP_INDEX)}
+                disabled={!canNavigateToStep(SUMMARY_STEP_INDEX)}
+              >
+                <span className="step-dot">{SUMMARY_STEP_INDEX + 1}</span>
+                <span className="step-text">{SUMMARY_STEP_TITLE}</span>
+              </button>
+            </div>
+          </div>
+
+          <section className="registration-group" data-step="0" hidden={currentStep !== 0}>
             <h2>1. Personal Information</h2>
             <div className="registration-grid">
               <label>
@@ -701,7 +933,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="1" hidden={currentStep !== 1}>
             <h2>2. Horoscope Details</h2>
             <div className="registration-grid">
               <label>
@@ -788,7 +1020,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="2" hidden={currentStep !== 2}>
             <h2>3. Education &amp; Career</h2>
             <div className="registration-grid">
               <label>
@@ -845,7 +1077,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="3" hidden={currentStep !== 3}>
             <h2>4. Family Details</h2>
             <div className="registration-grid">
               <label>
@@ -894,7 +1126,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="4" hidden={currentStep !== 4}>
             <h2>5. Lifestyle &amp; Additional Details</h2>
             <div className="registration-grid">
               <label className="registration-full">
@@ -922,7 +1154,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="5" hidden={currentStep !== 5}>
             <h2>6. Disability Information</h2>
             <div className="registration-grid">
               <label>
@@ -1004,7 +1236,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="6" hidden={currentStep !== 6}>
             <h2>7. Partner Expectations</h2>
             <div className="registration-grid">
               <label>
@@ -1089,7 +1321,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="7" hidden={currentStep !== 7}>
             <h2>8. Verification Documents</h2>
             <div className="registration-grid">
               <label>
@@ -1122,7 +1354,7 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <section className="registration-group">
+          <section className="registration-group" data-step="8" hidden={currentStep !== 8}>
             <h2>9. Referral Code</h2>
             <div className="registration-grid">
               <label className="registration-full referral-field">
@@ -1153,25 +1385,76 @@ const RegisterApp = () => {
             </div>
           </section>
 
-          <div className="registration-actions">
-            <div className="policy-links">
-              <a href="/rules.html" target="_blank" rel="noreferrer">
-                Read Rules &amp; Guidelines / Disclaimer
-              </a>
+          <section
+            className="registration-group"
+            data-step={SUMMARY_STEP_INDEX}
+            hidden={currentStep !== SUMMARY_STEP_INDEX}
+          >
+            <h2>10. Review Your Details</h2>
+            <p className="field-helper">
+              Please verify your details before final submission. You can go back to edit any step.
+            </p>
+            <div className="registration-summary-grid">
+              <div className="summary-item"><span>Full Name</span><p>{summaryData.name || "-"}</p></div>
+              <div className="summary-item"><span>Email</span><p>{summaryData.email || "-"}</p></div>
+              <div className="summary-item"><span>Mobile Number</span><p>{summaryData.phone || "-"}</p></div>
+              <div className="summary-item"><span>WhatsApp Number</span><p>{summaryData.whatsappNumber || "-"}</p></div>
+              <div className="summary-item"><span>Gender</span><p>{summaryData.gender || "-"}</p></div>
+              <div className="summary-item"><span>Date of Birth</span><p>{summaryData.dob || "-"}</p></div>
+              <div className="summary-item"><span>Current Location</span><p>{summaryData.currentLocation || "-"}</p></div>
+              <div className="summary-item"><span>Highest Qualification</span><p>{summaryData.highestQualification || "-"}</p></div>
+              <div className="summary-item"><span>Occupation</span><p>{summaryData.occupation || "-"}</p></div>
+              <div className="summary-item"><span>Nakshatra</span><p>{summaryData.nakshatra || "-"}</p></div>
+              <div className="summary-item"><span>Sect / Subsect</span><p>{`${summaryData.sect || "-"} / ${summaryData.subsect || "-"}`}</p></div>
+              <div className="summary-item"><span>Disability</span><p>{summaryData.disability || "-"}</p></div>
+              <div className="summary-item"><span>Preferred Qualification</span><p>{summaryData.preferredQualification || "-"}</p></div>
+              <div className="summary-item"><span>Preferred Occupation</span><p>{summaryData.preferredOccupation || "-"}</p></div>
+              <div className="summary-item"><span>Preferred Location</span><p>{summaryData.preferredLocation || "-"}</p></div>
+              <div className="summary-item"><span>Profile Photo</span><p>{summaryData.profilePhoto || "-"}</p></div>
+              <div className="summary-item"><span>Government Proof</span><p>{summaryData.governmentProofFile || "-"}</p></div>
+              <div className="summary-item"><span>Referral Code</span><p>{summaryData.referralCode || "-"}</p></div>
             </div>
-            <label className="acknowledge-check">
-              <input type="checkbox" name="policyAcknowledged" required />
-              <span>
-                I acknowledge that I have read the policies and submit this registration
-                with my consent.
-              </span>
-            </label>
+          </section>
+
+          <div className="registration-actions">
+            <div className="step-actions">
+              {currentStep > 0 && (
+                <button className="btn ghost" type="button" onClick={handleBackStep}>
+                  Back
+                </button>
+              )}
+              {currentStep < SUMMARY_STEP_INDEX ? (
+                <button className="btn primary" type="button" onClick={handleNextStep}>
+                  Next
+                </button>
+              ) : (
+                <button className="btn primary" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Submitting..." : "Submit Registration"}
+                </button>
+              )}
+            </div>
+            {currentStep === SUMMARY_STEP_INDEX && (
+              <>
+                <div className="policy-links">
+                  <a href="/rules.html" target="_blank" rel="noreferrer">
+                    Read Rules &amp; Guidelines / Disclaimer
+                  </a>
+                </div>
+                <label className="acknowledge-check">
+                  <input type="checkbox" name="policyAcknowledged" />
+                  <span>
+                    I acknowledge that I have read the policies and submit this registration
+                    with my consent.
+                  </span>
+                </label>
+                {fieldErrors.policyAcknowledged && (
+                  <span className="field-error">{fieldErrors.policyAcknowledged}</span>
+                )}
+              </>
+            )}
             {formMessage && (
               <p className={`form-message ${formError ? "error" : "success"}`}>{formMessage}</p>
             )}
-            <button className="btn primary" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Submit Registration"}
-            </button>
           </div>
         </form>
       </main>

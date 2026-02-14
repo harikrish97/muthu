@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,6 +10,11 @@ class MemberProfileBasic(BaseModel):
     age: Optional[int] = None
     height: str
     star_padham: str = Field(serialization_alias="starPadham")
+    rasi: Optional[str] = None
+    nakshatra: Optional[str] = None
+    sect: Optional[str] = None
+    subsect: Optional[str] = None
+    horoscope_matching_required: Optional[str] = Field(default=None, serialization_alias="horoscopeMatchingRequired")
     city: Optional[str] = None
     education: Optional[str] = None
     occupation: Optional[str] = None
@@ -23,6 +28,15 @@ class MemberProfileBasic(BaseModel):
 class MemberProfileDetails(BaseModel):
     about: Optional[str] = None
     family_details: Optional[str] = Field(default=None, serialization_alias="familyDetails")
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    dob: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
+    education: Optional[str] = None
+    occupation: Optional[str] = None
+    gothram: Optional[str] = None
+    additional_data: dict[str, Any] = Field(default_factory=dict, serialization_alias="additionalData")
 
     model_config = ConfigDict(populate_by_name=True)
 

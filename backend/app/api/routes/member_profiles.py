@@ -37,19 +37,56 @@ def _calculate_age(dob: Optional[str]) -> Optional[int]:
 
 def _to_basic(profile, unlocked: bool) -> MemberProfileBasic:
     extra_data = profile.extra_data if isinstance(profile.extra_data, dict) else {}
+    nakshatra = str(extra_data.get("nakshatra") or "").strip()
+    padham = str(extra_data.get("padham") or "").strip()
+    star_value = str(extra_data.get("starPadham") or "").strip()
+    if not star_value:
+        if nakshatra and padham:
+            star_value = f"{nakshatra} - {padham}"
+        elif nakshatra:
+            star_value = nakshatra
+        else:
+            star_value = "-"
+
+    image_url = extra_data.get("imageUrl")
+    if not image_url and isinstance(extra_data.get("profilePhoto"), dict):
+        image_url = None
+
     return MemberProfileBasic(
         profile_id=profile.member_id,
         name=profile.name,
         gender=profile.gender,
         age=_calculate_age(profile.dob),
         height=str(extra_data.get("height") or "-"),
-        star_padham=str(extra_data.get("starPadham") or "-"),
-        city=profile.city,
+        star_padham=star_value,
+        rasi=str(extra_data.get("rasi") or "") or None,
+        nakshatra=nakshatra or None,
+        sect=str(extra_data.get("sect") or "") or None,
+        subsect=str(extra_data.get("subsect") or "") or None,
+        horoscope_matching_required=str(extra_data.get("horoscopeMatchingRequired") or "") or None,
+        city=profile.city or str(extra_data.get("currentLocation") or "") or None,
         education=profile.education,
         occupation=profile.occupation,
-        image_url=extra_data.get("imageUrl"),
-        has_photo=bool(extra_data.get("hasPhoto", False)),
+        image_url=image_url,
+        has_photo=bool(extra_data.get("hasPhoto", False) or extra_data.get("profilePhoto")),
         unlocked=unlocked,
+    )
+
+
+def _to_full_details(profile) -> MemberProfileDetails:
+    extra_data = profile.extra_data if isinstance(profile.extra_data, dict) else {}
+    return MemberProfileDetails(
+        about=profile.message or str(extra_data.get("aboutMe") or "") or None,
+        family_details=profile.address or str(extra_data.get("familyPropertyDetails") or "") or None,
+        phone=profile.phone,
+        email=profile.email,
+        dob=profile.dob,
+        city=profile.city or str(extra_data.get("currentLocation") or "") or None,
+        address=profile.address,
+        education=profile.education or str(extra_data.get("highestQualification") or "") or None,
+        occupation=profile.occupation,
+        gothram=profile.gothram,
+        additional_data=extra_data,
     )
 
 
@@ -91,10 +128,7 @@ def get_profile_detail(
     profile, unlocked = result
 
     full_details = (
-        MemberProfileDetails(
-            about=profile.message,
-            family_details=profile.address,
-        )
+        _to_full_details(profile)
         if unlocked
         else None
     )
@@ -120,10 +154,7 @@ def unlock_profile(
         return UnlockProfileResponse(
             message="Full profile already unlocked",
             profile=_to_basic(profile, True),
-            full_details=MemberProfileDetails(
-                about=profile.message,
-                family_details=profile.address,
-            ),
+            full_details=_to_full_details(profile),
             credits_remaining=member.credits,
         )
 
@@ -138,9 +169,6 @@ def unlock_profile(
     return UnlockProfileResponse(
         message="Full profile unlocked successfully",
         profile=_to_basic(profile, True),
-        full_details=MemberProfileDetails(
-            about=profile.message,
-            family_details=profile.address,
-        ),
+        full_details=_to_full_details(profile),
         credits_remaining=credits_remaining,
     )

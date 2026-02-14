@@ -11,6 +11,7 @@ from app.repositories.registration import (
     update_registration_member_fields,
 )
 from app.schemas.auth import (
+    MemberChangePasswordRequest,
     MemberIdentity,
     MemberLoginRequest,
     MemberLoginResponse,
@@ -18,10 +19,24 @@ from app.schemas.auth import (
     MemberProfileUpdateRequest,
 )
 from app.services.member_session import create_member_token, extract_member_id_from_token
-from app.services.security import verify_password
+from app.services.security import hash_password, verify_password
 
 router = APIRouter()
 settings = get_settings()
+
+ALLOWED_MEMBER_EDITABLE_EXTRA_FIELDS = {
+    "currentLocation",
+    "companyName",
+    "workLocation",
+    "natureOfWork",
+    "salaryCurrency",
+    "salary",
+    "visaStatus",
+    "parentsStatus",
+    "expectedIncomeCurrency",
+    "expectedIncomeRange",
+    "additionalExpectations",
+}
 
 
 def _build_member_login_response(registration, db: Session) -> MemberLoginResponse:
@@ -53,6 +68,7 @@ def _build_member_login_response(registration, db: Session) -> MemberLoginRespon
             occupation=registration.occupation,
             message=registration.message,
             gothram=registration.gothram,
+            extraData=registration.extra_data or {},
             isActive=registration.is_active,
             credits=registration.credits,
         ),
@@ -123,11 +139,27 @@ def member_update_profile(
     db: Session = Depends(get_db),
 ) -> MemberIdentity:
     registration = _get_member_from_auth_header(authorization, db)
-    if payload.address is None and payload.occupation is None and payload.message is None:
+    if (
+        payload.address is None
+        and payload.occupation is None
+        and payload.message is None
+        and payload.extraData is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one editable field is required",
         )
+
+    sanitized_extra_data = None
+    if payload.extraData is not None:
+        submitted_keys = set(payload.extraData.keys())
+        disallowed_keys = sorted(submitted_keys - ALLOWED_MEMBER_EDITABLE_EXTRA_FIELDS)
+        if disallowed_keys:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"These fields are not editable: {', '.join(disallowed_keys)}",
+            )
+        sanitized_extra_data = {key: payload.extraData[key] for key in submitted_keys}
 
     updated = update_registration_member_fields(
         db,
@@ -135,6 +167,7 @@ def member_update_profile(
         address=payload.address.strip() if payload.address is not None else None,
         occupation=payload.occupation.strip() if payload.occupation is not None else None,
         message=payload.message.strip() if payload.message is not None else None,
+        extra_data=sanitized_extra_data,
     )
     return MemberIdentity(
         id=updated.member_id,
@@ -149,6 +182,36 @@ def member_update_profile(
         occupation=updated.occupation,
         message=updated.message,
         gothram=updated.gothram,
+        extraData=updated.extra_data or {},
         isActive=updated.is_active,
         credits=updated.credits,
     )
+
+
+@router.post("/member-password")
+def member_change_password(
+    payload: MemberChangePasswordRequest,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    registration = _get_member_from_auth_header(authorization, db)
+    if not verify_password(payload.currentPassword, registration.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    if len(payload.newPassword) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 4 characters",
+        )
+    if payload.newPassword == payload.currentPassword:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password",
+        )
+
+    registration.password_hash = hash_password(payload.newPassword)
+    db.add(registration)
+    db.commit()
+    return {"message": "Password updated successfully"}
