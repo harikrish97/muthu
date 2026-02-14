@@ -181,6 +181,9 @@ const App = () => {
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchError, setMatchError] = useState("");
   const [recentProfiles, setRecentProfiles] = useState([]);
+  const [publicRecentProfiles, setPublicRecentProfiles] = useState([]);
+  const [publicProfilesLoading, setPublicProfilesLoading] = useState(true);
+  const [publicProfilesError, setPublicProfilesError] = useState("");
   const [profilesTotal, setProfilesTotal] = useState(0);
   const [profilesPage, setProfilesPage] = useState(1);
   const [profilesTotalPages, setProfilesTotalPages] = useState(1);
@@ -230,6 +233,11 @@ const App = () => {
       sessionStorage.removeItem("vv_member_session");
     }
   }, []);
+
+  const isPublicFeedRunning = publicRecentProfiles.length > 1;
+  const publicFeedItems = isPublicFeedRunning
+    ? [...publicRecentProfiles, ...publicRecentProfiles]
+    : publicRecentProfiles;
 
   const refreshMemberSession = async (sessionOverride = null) => {
     const source = sessionOverride || memberSession;
@@ -284,6 +292,32 @@ const App = () => {
       fetchRecentProfiles(memberSession);
     }
   }, [memberSession?.token, profilesPage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPublicProfiles = async () => {
+      setPublicProfilesLoading(true);
+      setPublicProfilesError("");
+      try {
+        const data = await apiFetch("/public/profiles/recent-verified?limit=6");
+        if (!cancelled) {
+          setPublicRecentProfiles(data.items || []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPublicProfilesError(err.message || "Unable to load profiles");
+        }
+      } finally {
+        if (!cancelled) {
+          setPublicProfilesLoading(false);
+        }
+      }
+    };
+    fetchPublicProfiles();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleMemberLogin = async (event) => {
     event.preventDefault();
@@ -1219,12 +1253,11 @@ const App = () => {
           <div className="hero-content">
             <p className="eyebrow reveal">Trusted Vedic matrimony since 1999</p>
             <h1 className="reveal delay-1">
-              Vedic Vivaha connects families with authenticity and care.
+              Find verified bride and groom profiles with family-guided matching.
             </h1>
             <p className="subtext reveal delay-2">
-              Verified profiles, Vedic compatibility guidance, and a personal advisor who
-              understands your values. We help you find the right alliance with dignity and
-              discretion.
+              Start with trusted profile discovery, shortlist only relevant matches, and unlock full
+              details when you are ready. Built for serious families seeking meaningful alliances.
             </p>
             <div className="hero-actions reveal delay-3">
               <a className="btn primary" href="/registration.html">Create Profile</a>
@@ -1243,6 +1276,23 @@ const App = () => {
                 <h3>92%</h3>
                 <p>Match satisfaction</p>
               </div>
+            </div>
+            <div className="hero-trust-mini hero-trust-inline reveal delay-4">
+              <h4>Why Families Choose Us</h4>
+              <ul>
+                <li>
+                  <strong>Trusted Since 1999</strong>
+                  <span>Traditional matchmaking for serious families.</span>
+                </li>
+                <li>
+                  <strong>Verified Member Base</strong>
+                  <span>Profiles are screened before they are shown.</span>
+                </li>
+                <li>
+                  <strong>Guided Introductions</strong>
+                  <span>Advisor support from shortlist to first call.</span>
+                </li>
+              </ul>
             </div>
           </div>
           <div className="hero-panel">
@@ -1282,65 +1332,91 @@ const App = () => {
                 <a href="#contact">Login Procedure</a>
               </div>
             </div>
-            <figure className="notice-card wedding-banner reveal delay-1">
+            <article className="notice-card wedding-banner hero-visual-card reveal delay-1">
               <img
                 src="/blessed-union.png"
                 alt="Sacred wedding blessing"
                 loading="lazy"
               />
-            </figure>
+            </article>
           </div>
         </div>
       </section>
 
-      <section className="info-strip">
-        <div className="strip-item">
-          <h3>Personal Advisors</h3>
-          <p>Dedicated guidance from registration to match finalization.</p>
-        </div>
-        <div className="strip-item">
-          <h3>Horoscope Support</h3>
-          <p>Vedic compatibility and star alignment consultations.</p>
-        </div>
-        <div className="strip-item">
-          <h3>Verified Profiles</h3>
-          <p>Every profile is screened for authenticity and intent.</p>
-        </div>
-      </section>
-
-      <section className="section" id="about">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">About Vedic Vivaha</p>
-            <h2>We blend tradition with thoughtful, modern service.</h2>
+      <section className="home-recent-section" id="profiles">
+        <div className="home-recent-shell reveal delay-2">
+          <div className="home-recent-head">
+            <h3>Recently added verified profiles</h3>
           </div>
-        </div>
-        <div className="about-grid">
-          <article className="card">
-            <h3>Our Vision</h3>
-            <p>
-              To build lasting alliances rooted in values, compatibility, and mutual respect.
-              Every match is handled with confidentiality and care.
-            </p>
-            <ul className="list">
-              <li>Respect for family traditions</li>
-              <li>Trusted guidance by experienced staff</li>
-              <li>Discreet, secure information handling</li>
-            </ul>
-          </article>
-          <article className="card">
-            <h3>How We Work</h3>
-            <p>
-              Every profile journey is handled in a structured way: registration review, preference
-              mapping, compatibility screening, and guided family introductions.
-            </p>
-            <div className="signature">
-              <div className="signature-line"></div>
-              <div>
-                <p className="signature-name">Process-led Guidance</p>
-                <span>Transparent and family-focused support</span>
+          {publicProfilesLoading ? (
+            <p className="form-note">Loading profiles...</p>
+          ) : publicProfilesError ? (
+            <p className="form-message error">{publicProfilesError}</p>
+          ) : publicRecentProfiles.length === 0 ? (
+            <p className="form-note">No verified profiles available now.</p>
+          ) : (
+            <div className="home-recent-carousel">
+              <div className={`home-recent-track-x ${isPublicFeedRunning ? "is-running" : ""}`}>
+                {publicFeedItems.map((profile, index) => (
+                <article key={`${profile.profileId}-${index}`} className="home-recent-card">
+                  <img
+                    src={
+                      profile.imageUrl ||
+                      "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=220&q=80"
+                    }
+                    alt={`Profile ${profile.profileId}`}
+                    loading="lazy"
+                  />
+                  <div className="home-recent-meta">
+                    <div className="home-recent-topline">
+                      <p className="home-recent-id">{profile.profileId}</p>
+                      <span className="home-recent-age">{profile.age || "-"} yrs</span>
+                    </div>
+                    <p className="home-recent-main">{profile.profession || "-"}</p>
+                    <div className="home-recent-tags">
+                      <span>{profile.location || "-"}</span>
+                      <span>{profile.gothram || "-"}</span>
+                    </div>
+                  </div>
+                </article>
+              ))}
               </div>
             </div>
+          )}
+        </div>
+      </section>
+
+      <section className="section tint">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Client Feedback</p>
+            <h2>Families who found their match with us.</h2>
+          </div>
+        </div>
+        <div className="review-grid">
+          <article className="review-card">
+            <p>
+              "The advisor guided us with patience. We felt respected at every step and found a
+              wonderful match for our daughter."
+            </p>
+            <h4>Meera & Suresh</h4>
+            <span>Madurai</span>
+          </article>
+          <article className="review-card">
+            <p>
+              "Their verification process gave us confidence. We appreciated the detailed
+              horoscope support and family introductions."
+            </p>
+            <h4>Rajesh</h4>
+            <span>Hyderabad</span>
+          </article>
+          <article className="review-card">
+            <p>
+              "Professional, transparent, and genuinely caring. Vedic Vivaha respected our
+              tradition and values."
+            </p>
+            <h4>Bhavna</h4>
+            <span>Chennai</span>
           </article>
         </div>
       </section>
@@ -1348,27 +1424,99 @@ const App = () => {
       <section className="section tint" id="features">
         <div className="section-head">
           <div>
-            <p className="eyebrow">Features</p>
-            <h2>Everything you need for a confident, respectful search.</h2>
+            <p className="eyebrow">Why Choose Us</p>
+            <h2>Everything needed for a serious and safe profile search.</h2>
           </div>
         </div>
         <div className="feature-grid">
           <article className="feature-card">
-            <h3>Smart Match Filters</h3>
-            <p>Shortlist profiles using age, education, location, and tradition preferences.</p>
+            <h3>Real, Active Matches</h3>
+            <p>Discover recently added active profiles with verified information.</p>
           </article>
           <article className="feature-card">
-            <h3>Assisted Calls</h3>
-            <p>We schedule introductions with family consent and privacy.</p>
+            <h3>Advisor-Assisted Journey</h3>
+            <p>Our team helps from first shortlist to family introductions.</p>
           </article>
           <article className="feature-card">
-            <h3>Secure Document Vault</h3>
-            <p>Share horoscopes, biodata, and photos with controlled access.</p>
+            <h3>Credit-Based Privacy</h3>
+            <p>Detailed profile access is controlled and auditable for user safety.</p>
           </article>
           <article className="feature-card">
-            <h3>Verified Photos</h3>
-            <p>Every photo is verified by our team to maintain authenticity.</p>
+            <h3>Horoscope & Tradition Focus</h3>
+            <p>Essential Vedic fields are included upfront for faster compatibility checks.</p>
           </article>
+        </div>
+      </section>
+
+      <section className="section" id="about">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">About Vedic Vivaha</p>
+            <h2>A guided, family-first matchmaking process.</h2>
+          </div>
+        </div>
+        <div className="about-grid">
+          <article className="card">
+            <h3>Our Commitment</h3>
+            <p>
+              We help families find compatible alliances with dignity, privacy, and careful
+              verification at each step.
+            </p>
+            <ul className="list">
+              <li>Traditional preferences respected</li>
+              <li>Profile authenticity checks</li>
+              <li>Personal support from real advisors</li>
+            </ul>
+          </article>
+          <article className="card">
+            <h3>How It Works</h3>
+            <p>
+              Register once, complete your profile, and browse verified recent matches. Unlock
+              full details only for profiles you are truly interested in.
+            </p>
+            <div className="signature">
+              <div className="signature-line"></div>
+              <div>
+                <p className="signature-name">Simple, Transparent, Effective</p>
+                <span>Built for long-term compatibility, not random swiping</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="section tint" id="chart">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">What You Can See</p>
+            <h2>Relevant details that help families decide faster.</h2>
+          </div>
+        </div>
+        <div className="chart-grid">
+          <div className="chart-card">
+            <h3>Basic Profile View</h3>
+            <ul className="list">
+              <li>Profile ID, age, location, profession</li>
+              <li>Core horoscope details for compatibility</li>
+              <li>Verified photo availability status</li>
+            </ul>
+          </div>
+          <div className="chart-card">
+            <h3>Unlocked Full View</h3>
+            <ul className="list">
+              <li>Detailed personal and family information</li>
+              <li>Contact details and complete profile context</li>
+              <li>No repeat credits for already unlocked profiles</li>
+            </ul>
+          </div>
+          <div className="chart-card">
+            <h3>Privacy Controls</h3>
+            <ul className="list">
+              <li>Only active and approved profiles are visible</li>
+              <li>Role-based admin controls for updates</li>
+              <li>Secure backend API access and session checks</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -1426,106 +1574,6 @@ const App = () => {
           <div className="payment-card">Debit & Credit Cards</div>
           <div className="payment-card">Net Banking</div>
           <div className="payment-card">Cash at Office</div>
-        </div>
-      </section>
-
-      <section className="section tint" id="chart">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Chart - Basic Details</p>
-            <h2>Essential information we collect.</h2>
-          </div>
-        </div>
-        <div className="chart-grid">
-          <div className="chart-card">
-            <h3>Personal</h3>
-            <ul className="list">
-              <li>Name and date of birth</li>
-              <li>Time and place of birth</li>
-              <li>Height, complexion, and hobbies</li>
-            </ul>
-          </div>
-          <div className="chart-card">
-            <h3>Education & Career</h3>
-            <ul className="list">
-              <li>Highest qualification</li>
-              <li>Occupation and employer</li>
-              <li>Annual income range</li>
-            </ul>
-          </div>
-          <div className="chart-card">
-            <h3>Family</h3>
-            <ul className="list">
-              <li>Parents and siblings details</li>
-              <li>Traditional preferences</li>
-              <li>Residence and native</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section className="section" id="profiles">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Profiles & Photos</p>
-            <h2>Recently added verified profiles.</h2>
-          </div>
-          <a className="btn ghost" href="/register.html">View all profiles</a>
-        </div>
-        <div className="profile-grid">
-          <article className="profile-card">
-            <div className="profile-avatar">A</div>
-            <h3>Profile VV-2401</h3>
-            <p>Software Engineer, Chennai</p>
-            <span>26 yrs · Bharadwaj Gothram</span>
-          </article>
-          <article className="profile-card">
-            <div className="profile-avatar">S</div>
-            <h3>Profile VV-3176</h3>
-            <p>Chartered Accountant, Bengaluru</p>
-            <span>28 yrs · Vatsya Gothram</span>
-          </article>
-          <article className="profile-card">
-            <div className="profile-avatar">M</div>
-            <h3>Profile VV-2894</h3>
-            <p>Doctor, Coimbatore</p>
-            <span>27 yrs · Kaundinya Gothram</span>
-          </article>
-        </div>
-      </section>
-
-      <section className="section tint">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Client Feedback</p>
-            <h2>Families who found their match with us.</h2>
-          </div>
-        </div>
-        <div className="review-grid">
-          <article className="review-card">
-            <p>
-              "The advisor guided us with patience. We felt respected at every step and found a
-              wonderful match for our daughter."
-            </p>
-            <h4>Meera & Suresh</h4>
-            <span>Madurai</span>
-          </article>
-          <article className="review-card">
-            <p>
-              "Their verification process gave us confidence. We appreciated the detailed
-              horoscope support and family introductions."
-            </p>
-            <h4>Rajesh</h4>
-            <span>Hyderabad</span>
-          </article>
-          <article className="review-card">
-            <p>
-              "Professional, transparent, and genuinely caring. Vedic Vivaha respected our
-              tradition and values."
-            </p>
-            <h4>Bhavna</h4>
-            <span>Chennai</span>
-          </article>
         </div>
       </section>
 

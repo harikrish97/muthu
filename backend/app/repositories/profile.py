@@ -103,3 +103,18 @@ def unlock_profile_for_member(db: Session, member: Registration, profile: Regist
     db.commit()
     db.refresh(member)
     return True, member.credits
+
+
+def list_recent_verified_profiles(db: Session, limit: int = 8) -> list[Registration]:
+    stmt = (
+        select(Registration)
+        .where(
+            and_(
+                Registration.is_active.is_(True),
+                func.lower(func.coalesce(Registration.status, "")) == "verified",
+            )
+        )
+        .order_by(desc(Registration.created_at))
+        .limit(limit)
+    )
+    return list(db.scalars(stmt).all())
