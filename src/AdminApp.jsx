@@ -264,7 +264,9 @@ const AdminApp = () => {
         <header className="site-header">
           <div className="header-inner">
             <div className="brand">
-              <div className="brand-mark">VV</div>
+              <div className="brand-mark">
+                <img src="/vv-logo.jpg" alt="Vedic Vivaha logo" />
+              </div>
               <div>
                 <p className="brand-name">Vedic Vivaha</p>
                 <p className="brand-tag">Private Admin Login</p>
@@ -314,7 +316,9 @@ const AdminApp = () => {
       <header className="site-header">
         <div className="header-inner">
           <div className="brand">
-            <div className="brand-mark">VV</div>
+            <div className="brand-mark">
+              <img src="/vv-logo.jpg" alt="Vedic Vivaha logo" />
+            </div>
             <div>
               <p className="brand-name">Vedic Vivaha</p>
               <p className="brand-tag">Admin Dashboard</p>
