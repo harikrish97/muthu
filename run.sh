@@ -40,8 +40,8 @@ trap cleanup INT TERM EXIT
 echo "Starting backend on http://localhost:8000 ..."
 (
   cd "${BACKEND_DIR}"
-  DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://postgres:postgres@localhost:5432/vedic_vivaha}" \
-    "${VENV_DIR}/bin/uvicorn" app.main:app --reload --host 0.0.0.0 --port 8000
+  DATABASE_URL="${DATABASE_URL:-sqlite:///./vedic_vivaha.db}" \
+    "${VENV_DIR}/bin/uvicorn" app.main:app --reload --reload-dir app --reload-exclude '.venv/*' --host 0.0.0.0 --port 8000
 ) &
 BACKEND_PID=$!
 

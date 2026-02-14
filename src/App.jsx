@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "./lib/api";
 
 const App = () => {
-  const [registerMessage, setRegisterMessage] = useState("");
-  const [registerError, setRegisterError] = useState(false);
   const [loginMessage, setLoginMessage] = useState("");
   const [loginError, setLoginError] = useState(false);
   const [memberSession, setMemberSession] = useState(null);
@@ -304,38 +302,15 @@ const App = () => {
     }
   };
 
-  const handleRegister = async (event) => {
-    event.preventDefault();
-    setRegisterMessage("");
-    setRegisterError(false);
-
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const payload = Object.fromEntries(formData.entries());
-
-    try {
-      const data = await apiFetch("/registrations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      setRegisterMessage(
-        `Registration saved. Member ID: ${data.id}. Use this ID and your password to login.`
-      );
-      form.reset();
-    } catch (err) {
-      setRegisterError(true);
-      setRegisterMessage(err.message);
-    }
-  };
-
   if (memberSession) {
     return (
       <div className="member-page">
         <header className="site-header">
           <div className="header-inner">
             <div className="brand">
-              <div className="brand-mark">VV</div>
+              <div className="brand-mark">
+                <img src="/vv-logo.jpg" alt="Vedic Vivaha logo" />
+              </div>
               <div>
                 <p className="brand-name">Vedic Vivaha</p>
                 <p className="brand-tag">
@@ -630,7 +605,9 @@ const App = () => {
       <header className="site-header">
         <div className="header-inner">
           <div className="brand">
-            <div className="brand-mark">VV</div>
+            <div className="brand-mark">
+              <img src="/vv-logo.jpg" alt="Vedic Vivaha logo" />
+            </div>
             <div>
               <p className="brand-name">Vedic Vivaha</p>
               <p className="brand-tag">Sacred matchmaking, guided by tradition.</p>
@@ -638,14 +615,16 @@ const App = () => {
           </div>
           <nav className="nav-links">
             <a href="#home">Home</a>
-            <a href="#about">About</a>
+            <a href="#about">Our Purpose</a>
+            <a href="/founder.html">About the Founder</a>
             <a href="#features">Features</a>
             <a href="#tariff">Tariff</a>
-            <a href="#register">Registration</a>
+            <a href="/registration.html">Registration</a>
             <a href="#profiles">Profiles</a>
+            <a href="/rules.html">Rules & Disclaimer</a>
             <a href="#contact">Contact</a>
           </nav>
-          <a className="btn primary" href="#register">Register Now</a>
+          <a className="btn primary" href="/registration.html">Register Now</a>
         </div>
       </header>
 
@@ -662,7 +641,7 @@ const App = () => {
               discretion.
             </p>
             <div className="hero-actions reveal delay-3">
-              <a className="btn primary" href="#register">Create Profile</a>
+              <a className="btn primary" href="/registration.html">Create Profile</a>
               <a className="btn ghost" href="#contact">Speak to an Advisor</a>
             </div>
             <div className="hero-stats reveal delay-4">
@@ -713,17 +692,17 @@ const App = () => {
                 <button className="btn primary" type="submit">Login</button>
               </form>
               <div className="login-links">
-                <a href="#register">New Registration</a>
+                <a href="/register.html">New Registration</a>
                 <a href="#contact">Login Procedure</a>
               </div>
             </div>
-            <div className="notice-card reveal delay-1">
-              <h4>Important Notice</h4>
-              <p>
-                Protect your information. Vedic Vivaha never asks for OTP or payment details
-                over phone or email.
-              </p>
-            </div>
+            <figure className="notice-card wedding-banner reveal delay-1">
+              <img
+                src="/blessed-union.png"
+                alt="Sacred wedding blessing"
+                loading="lazy"
+              />
+            </figure>
           </div>
         </div>
       </section>
@@ -764,16 +743,16 @@ const App = () => {
             </ul>
           </article>
           <article className="card">
-            <h3>Founder Message</h3>
+            <h3>How We Work</h3>
             <p>
-              "We believe matchmaking is sacred. Our team ensures every family feels heard,
-              supported, and informed throughout the journey."
+              Every profile journey is handled in a structured way: registration review, preference
+              mapping, compatibility screening, and guided family introductions.
             </p>
             <div className="signature">
               <div className="signature-line"></div>
               <div>
-                <p className="signature-name">Dr. S. Narayanan</p>
-                <span>Founder & Director</span>
+                <p className="signature-name">Process-led Guidance</p>
+                <span>Transparent and family-focused support</span>
               </div>
             </div>
           </article>
@@ -849,127 +828,6 @@ const App = () => {
         </div>
       </section>
 
-      <section className="section tint" id="register">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Registration</p>
-            <h2>Register in four simple steps.</h2>
-          </div>
-        </div>
-        <div className="steps-grid">
-          <div className="step-card">
-            <span className="step-count">01</span>
-            <h3>Submit basic details</h3>
-            <p>Share family background, education, and contact preferences.</p>
-          </div>
-          <div className="step-card">
-            <span className="step-count">02</span>
-            <h3>Upload horoscope</h3>
-            <p>Provide Rasi and Navamsa charts for compatibility.</p>
-          </div>
-          <div className="step-card">
-            <span className="step-count">03</span>
-            <h3>Profile verification</h3>
-            <p>Our team verifies documents and photos within 48 hours.</p>
-          </div>
-          <div className="step-card">
-            <span className="step-count">04</span>
-            <h3>Start matching</h3>
-            <p>Receive curated profiles and schedule introductions.</p>
-          </div>
-        </div>
-        <div className="register-panel">
-          <div>
-            <h3>Ready to begin?</h3>
-            <p>Register online or visit our Chennai office for a guided signup.</p>
-          </div>
-          <button className="btn primary" type="button">Start Registration</button>
-        </div>
-        <div className="register-grid">
-          <form className="register-form" onSubmit={handleRegister}>
-            <h3>Quick Registration</h3>
-            <p className="form-note">Submit your details and our advisor will call you within 24 hours.</p>
-            <div className="form-grid">
-              <label>
-                <span>Full Name</span>
-                <input type="text" name="name" placeholder="Full name" required />
-              </label>
-              <label>
-                <span>Email Address</span>
-                <input type="email" name="email" placeholder="you@example.com" required />
-              </label>
-              <label>
-                <span>Create Password</span>
-                <input
-                  type="password"
-                  name="password"
-                  placeholder="At least 4 characters"
-                  minLength="4"
-                  required
-                />
-              </label>
-              <label>
-                <span>Phone Number</span>
-                <input type="tel" name="phone" placeholder="+91" required />
-              </label>
-              <label>
-                <span>Gender</span>
-                <select name="gender" required>
-                  <option value="">Select</option>
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                </select>
-              </label>
-              <label>
-                <span>Date of Birth</span>
-                <input type="date" name="dob" />
-              </label>
-              <label>
-                <span>City</span>
-                <input type="text" name="city" placeholder="City" />
-              </label>
-              <label>
-                <span>Address</span>
-                <input type="text" name="address" placeholder="Address" />
-              </label>
-              <label>
-                <span>Education</span>
-                <input type="text" name="education" placeholder="Highest qualification" />
-              </label>
-              <label>
-                <span>Occupation</span>
-                <input type="text" name="occupation" placeholder="Profession" />
-              </label>
-              <label>
-                <span>Gothram</span>
-                <input type="text" name="gothram" placeholder="Gothram" />
-              </label>
-            </div>
-            <label>
-              <span>Message</span>
-              <textarea name="message" rows="4" placeholder="Tell us about your preferences"></textarea>
-            </label>
-            {registerMessage && (
-              <p className={`form-message ${registerError ? "error" : "success"}`}>
-                {registerMessage}
-              </p>
-            )}
-            <button className="btn primary" type="submit">Submit Registration</button>
-          </form>
-          <div className="card register-info">
-            <h3>What happens next?</h3>
-            <ul className="list">
-              <li>Profile verification within 48 hours</li>
-              <li>Advisor calls to understand family preferences</li>
-              <li>Curated shortlist shared for review</li>
-            </ul>
-            <p className="form-note">
-              We never share your details without family consent.
-            </p>
-          </div>
-        </div>
-      </section>
-
       <section className="section" id="payment">
         <div className="section-head">
           <div>
@@ -1026,7 +884,7 @@ const App = () => {
             <p className="eyebrow">Profiles & Photos</p>
             <h2>Recently added verified profiles.</h2>
           </div>
-          <a className="btn ghost" href="#register">View all profiles</a>
+          <a className="btn ghost" href="/register.html">View all profiles</a>
         </div>
         <div className="profile-grid">
           <article className="profile-card">
@@ -1124,9 +982,12 @@ const App = () => {
           <p>Guiding families with respect, authenticity, and sacred tradition.</p>
         </div>
         <div className="footer-links">
-          <a href="#about">About</a>
+          <a href="#about">Our Purpose</a>
+          <a href="/founder.html">About the Founder</a>
           <a href="#features">Features</a>
           <a href="#tariff">Tariff</a>
+          <a href="/registration.html">Register</a>
+          <a href="/rules.html">Rules & Disclaimer</a>
           <a href="#contact">Contact</a>
         </div>
         <p className="footer-note">2026 © Vedic Vivaha. All rights reserved.</p>
