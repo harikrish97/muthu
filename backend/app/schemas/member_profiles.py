@@ -7,6 +7,7 @@ class MemberProfileBasic(BaseModel):
     profile_id: str = Field(serialization_alias="profileId")
     name: str
     gender: Optional[str] = None
+    dob: Optional[str] = None
     age: Optional[int] = None
     height: str
     star_padham: str = Field(serialization_alias="starPadham")
@@ -18,6 +19,7 @@ class MemberProfileBasic(BaseModel):
     city: Optional[str] = None
     education: Optional[str] = None
     occupation: Optional[str] = None
+    gothram: Optional[str] = None
     image_url: Optional[str] = Field(default=None, serialization_alias="imageUrl")
     has_photo: bool = Field(serialization_alias="hasPhoto")
     unlocked: bool

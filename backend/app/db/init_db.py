@@ -5,6 +5,7 @@ from app.db.base import Base
 from app.db.session import engine
 from app.models.member_profile_access import MemberProfileAccess  # noqa: F401
 from app.models.profile import Profile
+from app.models.profile_share_link import ProfileShareLink  # noqa: F401
 from app.models.registration import Registration  # noqa: F401
 
 

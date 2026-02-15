@@ -36,6 +36,7 @@ ALLOWED_MEMBER_EDITABLE_EXTRA_FIELDS = {
     "expectedIncomeCurrency",
     "expectedIncomeRange",
     "additionalExpectations",
+    "profilePhoto",
 }
 
 

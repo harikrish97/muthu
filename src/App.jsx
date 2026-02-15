@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "./lib/api";
+import PublicSharedProfileView from "./components/PublicSharedProfileView";
+import ShareModal from "./components/ShareModal";
 
 const SALARY_CURRENCY_OPTIONS = [
   "INR - Indian Rupee",
@@ -16,6 +18,64 @@ const PARENTS_STATUS_OPTIONS = [
   "Father Alive",
   "Mother Alive",
   "Both Deceased"
+];
+
+const NATURE_OF_WORK_OPTIONS = [
+  "Banking",
+  "Doctor",
+  "Engineering",
+  "IT",
+  "Government",
+  "Business",
+  "Education",
+  "Other"
+];
+
+const NAKSHATRA_OPTIONS = [
+  "Ashwini",
+  "Bharani",
+  "Krittika",
+  "Rohini",
+  "Mrigashirsha",
+  "Ardra",
+  "Punarvasu",
+  "Pushya",
+  "Ashlesha",
+  "Magha",
+  "Purva Phalguni",
+  "Uttara Phalguni",
+  "Hasta",
+  "Chitra",
+  "Swati",
+  "Vishakha",
+  "Anuradha",
+  "Jyeshtha",
+  "Mula",
+  "Purva Ashadha",
+  "Uttara Ashadha",
+  "Shravana",
+  "Dhanishta",
+  "Shatabhisha",
+  "Purva Bhadrapada",
+  "Uttara Bhadrapada",
+  "Revati"
+];
+
+const INLINE_EDITABLE_FIELDS = [
+  { key: "occupation", label: "Occupation", scope: "root", type: "text", placeholder: "Enter occupation" },
+  { key: "currentLocation", label: "Current Location", scope: "extra", type: "text", placeholder: "Enter current location" },
+  { key: "workLocation", label: "Work Location", scope: "extra", type: "text", placeholder: "Enter work location" },
+  { key: "companyName", label: "Company Name", scope: "extra", type: "text", placeholder: "Enter company name" },
+  { key: "natureOfWork", label: "Nature of Work", scope: "extra", type: "select", options: NATURE_OF_WORK_OPTIONS },
+  { key: "salaryCurrency", label: "Salary Currency", scope: "extra", type: "select", options: SALARY_CURRENCY_OPTIONS },
+  { key: "salary", label: "Salary", scope: "extra", type: "text", placeholder: "Enter salary" },
+  { key: "visaStatus", label: "Visa Status", scope: "extra", type: "text", placeholder: "Enter visa status" },
+  { key: "parentsStatus", label: "Parents Status", scope: "extra", type: "select", options: PARENTS_STATUS_OPTIONS },
+  { key: "expectedIncomeCurrency", label: "Expected Income Currency", scope: "extra", type: "select", options: SALARY_CURRENCY_OPTIONS },
+  { key: "expectedIncomeRange", label: "Expected Income Range", scope: "extra", type: "text", placeholder: "Enter expected income range" },
+  { key: "message", label: "Message", scope: "root", type: "textarea", rows: 3, placeholder: "Enter your message" },
+  { key: "address", label: "Address", scope: "root", type: "textarea", rows: 3, placeholder: "Enter address" },
+  { key: "additionalExpectations", label: "Additional Expectations", scope: "extra", type: "textarea", rows: 3, placeholder: "Enter additional expectations" }
 ];
 
 const EXCLUDED_ADDITIONAL_DETAIL_KEYS = new Set([
@@ -148,6 +208,27 @@ const isSameText = (a, b) =>
   String(a || "").trim().toLowerCase() !== "" &&
   String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
+const getYearFromDob = (dobValue) => {
+  const dob = String(dobValue || "").trim();
+  const year = Number(dob.split("-")?.[0]);
+  return Number.isInteger(year) && year > 0 ? year : null;
+};
+
+const getAgeFromDob = (dobValue) => {
+  const dob = String(dobValue || "").trim();
+  if (!dob) return null;
+
+  const [year, month, day] = dob.split("-").map((part) => Number(part));
+  if (![year, month, day].every((num) => Number.isInteger(num))) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  const monthDelta = today.getMonth() + 1 - month;
+  const dayDelta = today.getDate() - day;
+  if (monthDelta < 0 || (monthDelta === 0 && dayDelta < 0)) age -= 1;
+  return age >= 0 ? age : null;
+};
+
 const getGroupedAdditionalDetails = (additionalData = {}) => {
   const groups = [];
 
@@ -171,6 +252,79 @@ const getGroupedAdditionalDetails = (additionalData = {}) => {
 
   return groups;
 };
+
+const extractImageFromExtraData = (extraData = {}) => {
+  if (!extraData || typeof extraData !== "object") return "";
+  if (typeof extraData.imageUrl === "string" && extraData.imageUrl.trim()) return extraData.imageUrl.trim();
+
+  const profilePhoto = extraData.profilePhoto;
+  if (typeof profilePhoto === "string" && profilePhoto.trim()) return profilePhoto.trim();
+  if (profilePhoto && typeof profilePhoto === "object") {
+    for (const key of ["url", "dataUrl", "preview", "path"]) {
+      const value = profilePhoto[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return "";
+};
+
+const escapeHtml = (value) =>
+  String(value ?? "-")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+const buildPrintableProfileHtml = ({ title, subtitle, photoUrl, rows }) => {
+  const rowsHtml = rows
+    .map(
+      ([label, value]) =>
+        `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value || "-")}</td></tr>`
+    )
+    .join("");
+
+  const photoHtml = photoUrl
+    ? `<img src="${escapeHtml(photoUrl)}" alt="Profile photo" class="print-photo" />`
+    : `<div class="print-photo print-photo-placeholder">Photo Not Provided</div>`;
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; color: #2d2822; margin: 24px; }
+    .sheet { max-width: 900px; margin: 0 auto; border: 1px solid #d8cfb9; border-radius: 12px; padding: 22px; }
+    .head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 16px; }
+    h1 { margin: 0; font-size: 28px; color: #8f1c15; }
+    .sub { margin: 8px 0 0; color: #6a6256; font-size: 14px; }
+    .print-photo { width: 150px; height: 180px; border-radius: 10px; border: 1px solid #d8cfb9; object-fit: cover; }
+    .print-photo-placeholder { display: grid; place-items: center; color: #8b7a60; font-size: 12px; background: #f8f3e7; }
+    .watermark { margin-top: 16px; text-align: right; color: rgba(143, 28, 21, 0.5); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #e3dbc7; padding: 10px 12px; text-align: left; vertical-align: top; font-size: 14px; }
+    th { width: 220px; background: #faf5ea; color: #6a4a1e; }
+    @media print { body { margin: 0; } .sheet { border: none; border-radius: 0; } }
+  </style>
+</head>
+<body>
+  <section class="sheet">
+    <div class="head">
+      <div>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="sub">${escapeHtml(subtitle)}</p>
+      </div>
+      ${photoHtml}
+    </div>
+    <table><tbody>${rowsHtml}</tbody></table>
+    <p class="watermark">Vedic Vivaha</p>
+  </section>
+</body>
+</html>`;
+};
+
+const JSPDF_CDN_URL = "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js";
 
 const App = () => {
   const [loginMessage, setLoginMessage] = useState("");
@@ -209,9 +363,54 @@ const App = () => {
   });
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
+  const [nakshatraFilter, setNakshatraFilter] = useState("");
+  const [birthFilterMode, setBirthFilterMode] = useState("none");
+  const [yearOfBirthFilter, setYearOfBirthFilter] = useState("");
+  const [ageMinFilter, setAgeMinFilter] = useState("");
+  const [ageMaxFilter, setAgeMaxFilter] = useState("");
+  const [excludeSameGotra, setExcludeSameGotra] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareMeta, setShareMeta] = useState(null);
+  const [shareMessage, setShareMessage] = useState("");
+  const [shareMessageError, setShareMessageError] = useState(false);
+  const [shareToast, setShareToast] = useState("");
+  const [shareToastError, setShareToastError] = useState(false);
+  const [shareExpiresInDays, setShareExpiresInDays] = useState(7);
+  const [shareIncludeContactDetails, setShareIncludeContactDetails] = useState(false);
+  const [editingFieldKey, setEditingFieldKey] = useState("");
+  const [editingValue, setEditingValue] = useState("");
+  const [inlineSaveBusy, setInlineSaveBusy] = useState(false);
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [photoSaveBusy, setPhotoSaveBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
+  const sharedRouteToken = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const match = window.location.pathname.match(/^\/profile\/share\/([^/]+)\/?$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, []);
+
+  // Requirement fallback: if member gothram is unavailable, use Bharadwaj.
+  const loggedInUserGotra = memberSession?.member?.gothram || "Bharadwaj";
 
   const handleSubmit = (event) => {
     event.preventDefault();
+  };
+
+  const clearAllFilters = () => {
+    setGlobalSearchQuery("");
+    setDebouncedSearchQuery("");
+    setNakshatraFilter("");
+    setBirthFilterMode("none");
+    setYearOfBirthFilter("");
+    setAgeMinFilter("");
+    setAgeMaxFilter("");
+    setExcludeSameGotra(false);
   };
 
   const buildProfileDraft = (member = {}) => ({
@@ -220,6 +419,456 @@ const App = () => {
     message: member?.message || "",
     extraData: { ...(member?.extraData || {}) }
   });
+
+  const getEditableFieldCurrentValue = (field) => {
+    if (!field) return "";
+    if (field.scope === "root") {
+      return String(profileDraft?.[field.key] ?? memberSession?.member?.[field.key] ?? "");
+    }
+    return String(
+      profileDraft?.extraData?.[field.key] ?? memberSession?.member?.extraData?.[field.key] ?? ""
+    );
+  };
+
+  // Inline edit starts by switching one specific field from read-only to input mode.
+  const startInlineEdit = (field) => {
+    setAddressMessage("");
+    setAddressError(false);
+    setEditingFieldKey(field.key);
+    setEditingValue(getEditableFieldCurrentValue(field));
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingFieldKey("");
+    setEditingValue("");
+  };
+
+  const applyUpdatedMemberToState = (updatedMember) => {
+    setMemberSession((current) =>
+      current
+        ? {
+            ...current,
+            member: {
+              ...current.member,
+              ...updatedMember
+            }
+          }
+        : current
+    );
+    setProfileDraft(buildProfileDraft(updatedMember));
+  };
+
+  // Save only the active inline field; all other fields remain read-only.
+  const saveInlineEdit = async (field) => {
+    if (!memberSession?.token || !field || inlineSaveBusy) return;
+    setInlineSaveBusy(true);
+    setAddressMessage("");
+    setAddressError(false);
+
+    const normalizedValue = field.type === "textarea" || field.type === "text" ? editingValue.trim() : editingValue;
+    const payload =
+      field.scope === "root"
+        ? { [field.key]: normalizedValue }
+        : { extraData: { [field.key]: normalizedValue } };
+
+    try {
+      const updatedMember = await apiFetch("/member-profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${memberSession.token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      applyUpdatedMemberToState(updatedMember);
+      setAddressMessage(`${field.label} updated successfully.`);
+      setAddressError(false);
+      cancelInlineEdit();
+    } catch (err) {
+      setAddressMessage(err.message || "Unable to update field");
+      setAddressError(true);
+    } finally {
+      setInlineSaveBusy(false);
+    }
+  };
+
+  const openPhotoModal = () => {
+    const currentPhoto = extractImageFromExtraData(memberSession?.member?.extraData || {});
+    setPhotoPreview(currentPhoto);
+    setPhotoError("");
+    setPhotoModalOpen(true);
+  };
+
+  const handlePhotoFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const maxBytes = 5 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setPhotoError("Photo must be 5MB or less.");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Please select a JPG or PNG image.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPhotoPreview(String(reader.result || ""));
+      setPhotoError("");
+    };
+    reader.onerror = () => {
+      setPhotoError("Unable to read selected image.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const savePhotoUpdate = async () => {
+    if (!memberSession?.token || photoSaveBusy) return;
+    setPhotoSaveBusy(true);
+    setPhotoError("");
+    try {
+      const updatedMember = await apiFetch("/member-profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${memberSession.token}`
+        },
+        body: JSON.stringify({
+          extraData: {
+            profilePhoto: photoPreview
+          }
+        })
+      });
+      applyUpdatedMemberToState(updatedMember);
+      setAddressMessage("Profile photo updated successfully.");
+      setAddressError(false);
+      setPhotoModalOpen(false);
+    } catch (err) {
+      setPhotoError(err.message || "Unable to update profile photo.");
+    } finally {
+      setPhotoSaveBusy(false);
+    }
+  };
+
+  const showShareToastMessage = (message, isError = false) => {
+    setShareToast(message);
+    setShareToastError(isError);
+  };
+
+  const resolveShareStatus = (meta) => {
+    if (!meta) return "inactive";
+    const statusValue = String(meta.linkStatus || "inactive").toLowerCase();
+    if (statusValue !== "active") return statusValue;
+    if (!meta.expiresAt) return "active";
+    return new Date(meta.expiresAt).getTime() > Date.now() ? "active" : "expired";
+  };
+
+  const getMemberPrintableSnapshot = () => {
+    const member = memberSession?.member || {};
+    const extraData = member.extraData || {};
+    const location = member.city || extraData.currentLocation || "-";
+    const occupation = member.occupation || extraData.natureOfWork || "-";
+    const qualification = member.education || extraData.highestQualification || "-";
+    const about = member.message || extraData.aboutMe || "-";
+    const familyInfo = extraData.familyPropertyDetails || "-";
+
+    return {
+      title: `${member.name || "Member"} - Matrimony Biodata`,
+      subtitle: "Vedic Vivaha Profile Summary",
+      photoUrl: extractImageFromExtraData(extraData),
+      rows: [
+        ["Name", member.name || "-"],
+        ["Member ID", member.id || "-"],
+        ["Gender", member.gender || "-"],
+        ["Date of Birth", member.dob || "-"],
+        ["Phone", member.phone || "-"],
+        ["Email", member.email || "-"],
+        ["Location", location || "-"],
+        ["Education", qualification || "-"],
+        ["Occupation", occupation || "-"],
+        ["Gothram", member.gothram || "-"],
+        ["Nakshatra", extraData.nakshatra || "-"],
+        ["Sect / Subsect", [extraData.sect, extraData.subsect].filter(Boolean).join(" / ") || "-"],
+        ["About", about || "-"],
+        ["Family Details", familyInfo || "-"]
+      ]
+    };
+  };
+
+  const openPrintableWindow = (snapshot, shouldPromptPdf = false) => {
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=950,height=900");
+    if (!printWindow) {
+      showShareToastMessage("Popup blocked. Please allow popups and try again.", true);
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(buildPrintableProfileHtml(snapshot));
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      if (shouldPromptPdf) {
+        showShareToastMessage("Print dialog opened. Choose 'Save as PDF' to download.", false);
+      }
+    }, 200);
+  };
+
+  const handlePrintProfile = () => {
+    window.print();
+  };
+
+  const loadJsPdfLibrary = async () => {
+    if (window.jspdf?.jsPDF) {
+      return window.jspdf.jsPDF;
+    }
+
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[data-vv-lib="jspdf"]`);
+      if (existing) {
+        existing.addEventListener("load", resolve, { once: true });
+        existing.addEventListener("error", () => reject(new Error("Unable to load PDF library")), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = JSPDF_CDN_URL;
+      script.async = true;
+      script.dataset.vvLib = "jspdf";
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Unable to load PDF library"));
+      document.head.appendChild(script);
+    });
+
+    if (!window.jspdf?.jsPDF) {
+      throw new Error("PDF library unavailable");
+    }
+    return window.jspdf.jsPDF;
+  };
+
+  const toImageDataUrl = async (imageUrl) => {
+    if (!imageUrl) return "";
+    if (String(imageUrl).startsWith("data:image/")) return imageUrl;
+
+    return new Promise((resolve) => {
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          const context = canvas.getContext("2d");
+          context.drawImage(image, 0, 0);
+          resolve(canvas.toDataURL("image/jpeg", 0.92));
+        } catch {
+          resolve("");
+        }
+      };
+      image.onerror = () => resolve("");
+      image.src = imageUrl;
+    });
+  };
+
+  const createShareLink = async () => {
+    if (!memberSession?.token) throw new Error("Please login again.");
+
+    setShareBusy(true);
+    setShareMessage("");
+    setShareMessageError(false);
+    try {
+      const data = await apiFetch("/profile/share", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${memberSession.token}`
+        },
+        body: JSON.stringify({
+          expiresInDays: shareExpiresInDays,
+          includeContactDetails: shareIncludeContactDetails
+        })
+      });
+      setShareMeta(data);
+      setShareMessage("Secure share link generated.");
+      setShareMessageError(false);
+      return data;
+    } catch (err) {
+      setShareMessage(err.message || "Unable to generate share link");
+      setShareMessageError(true);
+      throw err;
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const getShareUrl = (meta) => {
+    if (!meta?.sharePath) return "";
+    return `${window.location.origin}${meta.sharePath}`;
+  };
+
+  const ensureActiveShareLink = async () => {
+    const currentStatus = resolveShareStatus(shareMeta);
+    if (currentStatus === "active" && shareMeta?.sharePath) {
+      return { meta: shareMeta, url: getShareUrl(shareMeta) };
+    }
+    const created = await createShareLink();
+    return { meta: created, url: getShareUrl(created) };
+  };
+
+  const handleCopyShareLink = async () => {
+    try {
+      const { url } = await ensureActiveShareLink();
+      if (!url) throw new Error("Share link unavailable");
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const el = document.createElement("textarea");
+        el.value = url;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+      showShareToastMessage("Share link copied.");
+    } catch (err) {
+      showShareToastMessage(err.message || "Unable to copy link", true);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    try {
+      const { url } = await ensureActiveShareLink();
+      const text = `Please review this matrimonial profile: ${url}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      showShareToastMessage(err.message || "Unable to prepare WhatsApp share", true);
+    }
+  };
+
+  const handleShareEmail = async () => {
+    try {
+      const { url } = await ensureActiveShareLink();
+      const memberName = memberSession?.member?.name || "Member";
+      const subject = `Matrimony Profile – ${memberName}`;
+      const body = `Please review this matrimonial profile:\n\n${url}`;
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    } catch (err) {
+      showShareToastMessage(err.message || "Unable to prepare email share", true);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      const snapshot = getMemberPrintableSnapshot();
+      const JsPdf = await loadJsPdfLibrary();
+      const doc = new JsPdf({ unit: "pt", format: "a4" });
+
+      doc.setFont("times", "bold");
+      doc.setFontSize(22);
+      doc.text("Vedic Vivaha - Profile Biodata", 40, 50);
+
+      doc.setFont("times", "normal");
+      doc.setFontSize(12);
+      doc.text(snapshot.subtitle, 40, 70);
+
+      const imageDataUrl = await toImageDataUrl(snapshot.photoUrl);
+      if (imageDataUrl) {
+        doc.addImage(imageDataUrl, "JPEG", 420, 40, 130, 160);
+      } else {
+        doc.setDrawColor(200, 190, 170);
+        doc.rect(420, 40, 130, 160);
+        doc.setFontSize(10);
+        doc.text("Photo unavailable", 445, 120);
+        doc.setFontSize(12);
+      }
+
+      let y = 95;
+      const labelX = 40;
+      const valueX = 185;
+      const rowHeight = 22;
+      const valueWrapWidth = 360;
+
+      snapshot.rows.forEach(([label, value]) => {
+        if (y > 760) {
+          doc.addPage();
+          y = 60;
+        }
+        const safeValue = String(value || "-");
+        const wrapped = doc.splitTextToSize(safeValue, valueWrapWidth);
+        const lineCount = Math.max(1, wrapped.length);
+        const rowBlockHeight = Math.max(rowHeight, 16 * lineCount);
+
+        doc.setFont("times", "bold");
+        doc.text(`${label}:`, labelX, y);
+        doc.setFont("times", "normal");
+        doc.text(wrapped, valueX, y);
+        y += rowBlockHeight;
+      });
+
+      doc.setFontSize(10);
+      doc.setTextColor(130, 110, 90);
+      doc.text("Generated by Vedic Vivaha", 40, 810);
+      doc.save(`${(memberSession?.member?.id || "profile").replace(/[^\w-]/g, "_")}.pdf`);
+      showShareToastMessage("PDF downloaded.");
+    } catch (err) {
+      showShareToastMessage(err.message || "Unable to generate PDF. Opening print dialog instead.", true);
+      const snapshot = getMemberPrintableSnapshot();
+      openPrintableWindow(snapshot, true);
+    }
+  };
+
+  const handleRevokeShareLink = async () => {
+    if (!memberSession?.token || !shareMeta?.token) return;
+    setShareBusy(true);
+    setShareMessage("");
+    setShareMessageError(false);
+    try {
+      const data = await apiFetch(`/profile/share/${encodeURIComponent(shareMeta.token)}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${memberSession.token}`
+        }
+      });
+      setShareMeta((current) => ({
+        ...(current || {}),
+        linkStatus: data.linkStatus || "revoked"
+      }));
+      setShareMessage(data.message || "Share link disabled");
+      showShareToastMessage("Share link disabled.");
+    } catch (err) {
+      setShareMessage(err.message || "Unable to disable link");
+      setShareMessageError(true);
+      showShareToastMessage(err.message || "Unable to disable link", true);
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(globalSearchQuery);
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [globalSearchQuery]);
+
+  useEffect(() => {
+    if (!shareToast) return;
+    const timer = setTimeout(() => {
+      setShareToast("");
+      setShareToastError(false);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [shareToast]);
+
+  useEffect(() => {
+    if (memberView !== "profile") {
+      cancelInlineEdit();
+      setPhotoModalOpen(false);
+      setPhotoError("");
+    }
+  }, [memberView]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("vv_member_session");
@@ -341,6 +990,8 @@ const App = () => {
       setMemberView("matches");
       setProfilesPage(1);
       setProfileDraft(buildProfileDraft(body?.member));
+      clearAllFilters();
+      setIsAdvancedSearchOpen(false);
       setLoginMessage("Login successful");
       form.reset();
     } catch (err) {
@@ -367,44 +1018,24 @@ const App = () => {
     setSelectedProfile(null);
     setMatchError("");
     setShowUnlockConfirm(false);
-  };
-
-  const handleProfileUpdate = async (event) => {
-    event.preventDefault();
-    if (!memberSession?.token) return;
-
-    setAddressMessage("");
-    setAddressError(false);
-    try {
-      const updatedMember = await apiFetch("/member-profile", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${memberSession.token}`
-        },
-        body: JSON.stringify({
-          address: profileDraft.address,
-          occupation: profileDraft.occupation,
-          message: profileDraft.message,
-          extraData: profileDraft.extraData
-        })
-      });
-      setMemberSession((current) => {
-        const next = {
-          ...current,
-          member: {
-            ...current.member,
-            ...updatedMember
-          }
-        };
-        setProfileDraft(buildProfileDraft(next.member));
-        return next;
-      });
-      setAddressMessage("Profile updated successfully.");
-    } catch (err) {
-      setAddressError(true);
-      setAddressMessage(err.message);
-    }
+    clearAllFilters();
+    setIsAdvancedSearchOpen(false);
+    setShowShareModal(false);
+    setShareBusy(false);
+    setShareMeta(null);
+    setShareMessage("");
+    setShareMessageError(false);
+    setShareToast("");
+    setShareToastError(false);
+    setShareIncludeContactDetails(false);
+    setShareExpiresInDays(7);
+    setEditingFieldKey("");
+    setEditingValue("");
+    setInlineSaveBusy(false);
+    setPhotoModalOpen(false);
+    setPhotoPreview("");
+    setPhotoSaveBusy(false);
+    setPhotoError("");
   };
 
   const handlePasswordUpdate = async (event) => {
@@ -496,6 +1127,103 @@ const App = () => {
     return pages;
   };
 
+  const hasActiveSearchOrFilter = Boolean(
+    debouncedSearchQuery.trim() ||
+      nakshatraFilter ||
+      (birthFilterMode === "year" && yearOfBirthFilter) ||
+      (birthFilterMode === "age" && (ageMinFilter || ageMaxFilter)) ||
+      excludeSameGotra
+  );
+
+  // useMemo keeps filtering + sorting work cheap for large datasets.
+  const filteredRecentProfiles = useMemo(() => {
+    const searchValue = debouncedSearchQuery.trim().toLowerCase();
+    const selectedNakshatra = nakshatraFilter.trim().toLowerCase();
+    const selectedYear = Number(yearOfBirthFilter);
+    const minAge = ageMinFilter !== "" ? Number(ageMinFilter) : null;
+    const maxAge = ageMaxFilter !== "" ? Number(ageMaxFilter) : null;
+    const myGotra = String(loggedInUserGotra || "").trim().toLowerCase();
+
+    const filtered = recentProfiles.filter((profile) => {
+      const profileId = String(profile.profileId || "").trim();
+      const profileName = String(profile.name || "").trim().toLowerCase();
+      const profileLocation = String(profile.city || profile.location || "").trim().toLowerCase();
+      const idExactMatch = profileId.toLowerCase() === searchValue;
+
+      // Global search supports exact Profile ID and partial Name/Location matches.
+      if (
+        searchValue &&
+        !idExactMatch &&
+        !profileName.includes(searchValue) &&
+        !profileLocation.includes(searchValue)
+      ) {
+        return false;
+      }
+
+      const nakshatraValue = String(
+        profile.nakshatra || String(profile.starPadham || "").split("-")[0]
+      )
+        .trim()
+        .toLowerCase();
+
+      if (selectedNakshatra && nakshatraValue !== selectedNakshatra) {
+        return false;
+      }
+
+      const profileYear = getYearFromDob(profile.dob);
+      const profileAge = getAgeFromDob(profile.dob);
+
+      if (birthFilterMode === "year" && yearOfBirthFilter) {
+        if (!Number.isInteger(selectedYear) || profileYear !== selectedYear) {
+          return false;
+        }
+      }
+
+      if (birthFilterMode === "age") {
+        if (minAge !== null) {
+          if (!Number.isFinite(minAge) || profileAge === null || profileAge < minAge) {
+            return false;
+          }
+        }
+        if (maxAge !== null) {
+          if (!Number.isFinite(maxAge) || profileAge === null || profileAge > maxAge) {
+            return false;
+          }
+        }
+      }
+
+      if (excludeSameGotra) {
+        const profileGotra = String(profile.gothram || "").trim().toLowerCase();
+        if (myGotra && profileGotra && profileGotra === myGotra) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    const decorated = filtered.map((profile) => ({
+      ...profile,
+      isExactProfileIdMatch:
+        Boolean(searchValue) &&
+        String(profile.profileId || "").trim().toLowerCase() === searchValue
+    }));
+
+    // Exact profile ID match is prioritized to appear first in results.
+    decorated.sort((a, b) => Number(b.isExactProfileIdMatch) - Number(a.isExactProfileIdMatch));
+    return decorated;
+  }, [
+    recentProfiles,
+    debouncedSearchQuery,
+    nakshatraFilter,
+    birthFilterMode,
+    yearOfBirthFilter,
+    ageMinFilter,
+    ageMaxFilter,
+    excludeSameGotra,
+    loggedInUserGotra
+  ]);
+
   const openProfileDetail = async (profileId) => {
     if (!memberSession?.token) return;
     setSelectedProfileLoading(true);
@@ -569,10 +1297,36 @@ const App = () => {
     }
   };
 
+  const memberPhoto =
+    extractImageFromExtraData(memberSession?.member?.extraData || {}) ||
+    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=800&q=80";
+  const memberPhotoAvailable = Boolean(extractImageFromExtraData(memberSession?.member?.extraData || {}));
+
+  const readonlyProfileFields = [
+    { key: "name", label: "Name", value: memberSession?.member?.name || "-" },
+    { key: "member-id", label: "Member ID", value: memberSession?.member?.id || "-" },
+    { key: "email", label: "Email", value: memberSession?.member?.email || "-" },
+    { key: "phone", label: "Phone", value: memberSession?.member?.phone || "-" },
+    { key: "gender", label: "Gender", value: memberSession?.member?.gender || "-" },
+    { key: "dob", label: "Date of Birth", value: memberSession?.member?.dob || "-" },
+    { key: "height", label: "Height", value: memberSession?.member?.extraData?.height || "-" },
+    {
+      key: "parents",
+      label: "Parents Name",
+      value: `${memberSession?.member?.extraData?.fatherName || "-"} / ${memberSession?.member?.extraData?.motherName || "-"}`
+    },
+    { key: "siblings", label: "Siblings", value: memberSession?.member?.extraData?.siblingsDetails || "-" },
+    { key: "credits", label: "Credits", value: memberSession?.member?.credits ?? 0 }
+  ];
+
+  if (sharedRouteToken) {
+    return <PublicSharedProfileView token={sharedRouteToken} />;
+  }
+
   if (memberSession) {
     return (
       <div className="member-page">
-        <header className="site-header">
+        <header className="site-header no-print">
           <div className="header-inner">
             <div className="brand">
               <div className="brand-mark">
@@ -590,15 +1344,15 @@ const App = () => {
               </div>
             </div>
             <div className="member-top-actions">
-              {memberView !== "matches" && (
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={() => setMemberView("matches")}
-                >
-                  Matches
-                </button>
-              )}
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => setMemberView("matches")}
+                title="Go to dashboard"
+              >
+                <span aria-hidden="true">🏠</span>
+                Dashboard
+              </button>
               <button
                 className="btn ghost"
                 type="button"
@@ -620,8 +1374,25 @@ const App = () => {
           <section className="section member-section">
             <div className="member-profile-shell reveal">
               {memberLoading && <p className="form-note" style={{ marginBottom: "10px" }}>Loading profile...</p>}
+              <div className="profile-photo-shell">
+                <div className="profile-photo-frame">
+                  <img src={memberPhoto} alt={`${memberSession.member?.name} profile`} />
+                  <button
+                    className="profile-photo-edit-btn no-print"
+                    type="button"
+                    onClick={openPhotoModal}
+                    aria-label="Edit profile photo"
+                    title="Edit profile photo"
+                  >
+                    📷
+                  </button>
+                </div>
+                <p className="form-note">
+                  {memberPhotoAvailable ? "Profile photo uploaded" : "Add your profile photo"}
+                </p>
+              </div>
               <div className="member-profile-banner">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
+                <div className="profile-banner-head">
                   <div>
                     <p className="eyebrow">My Profile</p>
                     <h2>{memberSession.member?.name}</h2>
@@ -629,275 +1400,138 @@ const App = () => {
                       Member ID: <strong>{memberSession.member?.id}</strong>
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setMemberView("password")}
-                    className="btn ghost"
-                    style={{ padding: "6px 10px", fontSize: "12px", lineHeight: 1.2, minWidth: "auto" }}
-                  >
-                    Reset Password
-                  </button>
+                  <div className="profile-quick-actions no-print">
+                    <button
+                      type="button"
+                      onClick={handlePrintProfile}
+                      className="btn ghost profile-quick-btn"
+                    >
+                      <span aria-hidden="true">🖨</span>
+                      Print Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowShareModal(true);
+                        setShareMessage("");
+                        setShareMessageError(false);
+                      }}
+                      className="btn ghost profile-quick-btn"
+                    >
+                      <span aria-hidden="true">🔗</span>
+                      Share Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMemberView("password")}
+                      className="btn ghost profile-quick-btn"
+                    >
+                      Reset Password
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="member-profile-grid">
-                <div className="member-profile-item"><span>Name</span><p>{memberSession.member?.name || "-"}</p></div>
-                <div className="member-profile-item"><span>Email</span><p>{memberSession.member?.email || "-"}</p></div>
-                <div className="member-profile-item"><span>Phone</span><p>{memberSession.member?.phone || "-"}</p></div>
-                <div className="member-profile-item"><span>Gender</span><p>{memberSession.member?.gender || "-"}</p></div>
-                <div className="member-profile-item"><span>Date of Birth</span><p>{memberSession.member?.dob || "-"}</p></div>
-                <div className="member-profile-item"><span>Height</span><p>{memberSession.member?.extraData?.height || "-"}</p></div>
-                <div className="member-profile-item"><span>Parents Name</span><p>{`${memberSession.member?.extraData?.fatherName || "-"} / ${memberSession.member?.extraData?.motherName || "-"}`}</p></div>
-                <div className="member-profile-item"><span>Siblings</span><p>{memberSession.member?.extraData?.siblingsDetails || "-"}</p></div>
-                <div className="member-profile-item"><span>Credits</span><p>{memberSession.member?.credits ?? 0}</p></div>
-              </div>
-              <form className="member-address-form" onSubmit={handleProfileUpdate}>
-                <div className="member-edit-grid">
-                  <label>
-                    <span>Occupation (Editable)</span>
-                    <input
-                      type="text"
-                      value={profileDraft.occupation}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({ ...current, occupation: e.target.value }))
-                      }
-                      placeholder="Enter your occupation"
-                    />
-                  </label>
-                  <label>
-                    <span>Current Location (Editable)</span>
-                    <input
-                      type="text"
-                      value={String(profileDraft.extraData?.currentLocation || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            currentLocation: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter current location"
-                    />
-                  </label>
-                  <label>
-                    <span>Work Location (Editable)</span>
-                    <input
-                      type="text"
-                      value={String(profileDraft.extraData?.workLocation || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            workLocation: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter work location"
-                    />
-                  </label>
 
-                  <label>
-                    <span>Salary Currency (Editable)</span>
-                    <select
-                      value={String(profileDraft.extraData?.salaryCurrency || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            salaryCurrency: e.target.value
-                          }
-                        }))
-                      }
-                    >
-                      <option value="">Select</option>
-                      {SALARY_CURRENCY_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Salary (Editable)</span>
-                    <input
-                      type="text"
-                      value={String(profileDraft.extraData?.salary || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            salary: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter salary"
-                    />
-                  </label>
-                  <label>
-                    <span>Expected Income Currency (Editable)</span>
-                    <select
-                      value={String(profileDraft.extraData?.expectedIncomeCurrency || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            expectedIncomeCurrency: e.target.value
-                          }
-                        }))
-                      }
-                    >
-                      <option value="">Select</option>
-                      {SALARY_CURRENCY_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+              <section className="member-profile-readonly">
+                <h3>Profile Summary</h3>
+                <div className="member-profile-grid">
+                  {readonlyProfileFields.map((field) => (
+                    <div className="member-profile-item readonly" key={field.key}>
+                      <span>{field.label}</span>
+                      <p>{field.value || "-"}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
 
-                  <label>
-                    <span>Expected Income Range (Editable)</span>
-                    <input
-                      type="text"
-                      value={String(profileDraft.extraData?.expectedIncomeRange || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            expectedIncomeRange: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter expected income range"
-                    />
-                  </label>
-                  <label>
-                    <span>Parents Status (Editable)</span>
-                    <select
-                      value={String(profileDraft.extraData?.parentsStatus || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            parentsStatus: e.target.value
-                          }
-                        }))
-                      }
-                    >
-                      <option value="">Select</option>
-                      {PARENTS_STATUS_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Visa Status (Editable)</span>
-                    <input
-                      type="text"
-                      value={String(profileDraft.extraData?.visaStatus || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            visaStatus: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter visa status"
-                    />
-                  </label>
-
-                  <label>
-                    <span>Company Name (Editable)</span>
-                    <input
-                      type="text"
-                      value={String(profileDraft.extraData?.companyName || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            companyName: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter company name"
-                    />
-                  </label>
-                  <label>
-                    <span>Nature of Work (Editable)</span>
-                    <input
-                      type="text"
-                      value={String(profileDraft.extraData?.natureOfWork || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            natureOfWork: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter nature of work"
-                    />
-                  </label>
-                  <label className="member-edit-full">
-                    <span>Address (Editable)</span>
-                    <textarea
-                      rows="3"
-                      value={profileDraft.address}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({ ...current, address: e.target.value }))
-                      }
-                      placeholder="Enter your address"
-                    ></textarea>
-                  </label>
-                  <label className="member-edit-full">
-                    <span>Message (Editable)</span>
-                    <textarea
-                      rows="3"
-                      value={profileDraft.message}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({ ...current, message: e.target.value }))
-                      }
-                      placeholder="Enter your message"
-                    ></textarea>
-                  </label>
-                  <label className="member-edit-full">
-                    <span>Additional Expectations (Editable)</span>
-                    <textarea
-                      rows="3"
-                      value={String(profileDraft.extraData?.additionalExpectations || "")}
-                      onChange={(e) =>
-                        setProfileDraft((current) => ({
-                          ...current,
-                          extraData: {
-                            ...(current.extraData || {}),
-                            additionalExpectations: e.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Enter additional expectations"
-                    ></textarea>
-                  </label>
+              <section className="member-inline-edit-shell no-print">
+                <h3>Update Details</h3>
+                <div className="inline-edit-grid">
+                  {INLINE_EDITABLE_FIELDS.map((field) => {
+                    const isEditing = editingFieldKey === field.key;
+                    const value = getEditableFieldCurrentValue(field);
+                    return (
+                      <article className="inline-field-card" key={field.key}>
+                        <label>{field.label}</label>
+                        {!isEditing ? (
+                          <div className="inline-field-readonly">
+                            <span>{value || "-"}</span>
+                            <button
+                              type="button"
+                              className="inline-icon-btn"
+                              onClick={() => startInlineEdit(field)}
+                              aria-label={`Edit ${field.label}`}
+                              title={`Edit ${field.label}`}
+                            >
+                              ✎
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="inline-field-editing">
+                            {field.type === "select" ? (
+                              <select
+                                value={editingValue}
+                                onChange={(event) => setEditingValue(event.target.value)}
+                                autoFocus
+                              >
+                                <option value="">Select</option>
+                                {(field.options || []).map((option) => (
+                                  <option value={option} key={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : field.type === "textarea" ? (
+                              <textarea
+                                rows={field.rows || 3}
+                                value={editingValue}
+                                onChange={(event) => setEditingValue(event.target.value)}
+                                placeholder={field.placeholder || ""}
+                                autoFocus
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                value={editingValue}
+                                onChange={(event) => setEditingValue(event.target.value)}
+                                placeholder={field.placeholder || ""}
+                                autoFocus
+                              />
+                            )}
+                            <div className="inline-edit-actions">
+                              <button
+                                type="button"
+                                className="inline-icon-btn save"
+                                onClick={() => saveInlineEdit(field)}
+                                disabled={inlineSaveBusy}
+                                aria-label={`Save ${field.label}`}
+                                title="Save"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-icon-btn cancel"
+                                onClick={cancelInlineEdit}
+                                disabled={inlineSaveBusy}
+                                aria-label={`Cancel ${field.label}`}
+                                title="Cancel"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
                 {addressMessage && (
                   <p className={`form-message ${addressError ? "error" : "success"}`}>
                     {addressMessage}
                   </p>
                 )}
-                <button className="btn primary" type="submit">Update Profile</button>
-              </form>
+              </section>
             </div>
           </section>
         ) : memberView === "password" ? (
@@ -1119,14 +1753,137 @@ const App = () => {
                   {matchError}
                 </p>
               )}
+              <div className="global-search-row">
+                <label className="global-search-input">
+                  <span>Search Profiles</span>
+                  <input
+                    type="search"
+                    placeholder="Search by Profile ID, Name, or Location"
+                    value={globalSearchQuery}
+                    onChange={(event) => setGlobalSearchQuery(event.target.value)}
+                  />
+                </label>
+                <button className="btn ghost" type="button" onClick={clearAllFilters}>
+                  Clear All Filters
+                </button>
+              </div>
+              <div className="advanced-search-shell">
+                <button
+                  className="advanced-search-toggle"
+                  type="button"
+                  onClick={() => setIsAdvancedSearchOpen((open) => !open)}
+                  aria-expanded={isAdvancedSearchOpen}
+                >
+                  {isAdvancedSearchOpen ? "Hide Advanced Search" : "Show Advanced Search"}
+                </button>
+                {isAdvancedSearchOpen && (
+                  <div className="advanced-search-panel">
+                    <div className="advanced-search-grid">
+                      <label>
+                        <span>Matching Star (Nakshatra)</span>
+                        <select
+                          value={nakshatraFilter}
+                          onChange={(event) => setNakshatraFilter(event.target.value)}
+                        >
+                          <option value="">All Nakshatras</option>
+                          {NAKSHATRA_OPTIONS.map((nakshatra) => (
+                            <option key={nakshatra} value={nakshatra}>
+                              {nakshatra}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        <span>Birth Filter Mode</span>
+                        <select
+                          value={birthFilterMode}
+                          onChange={(event) => {
+                            const mode = event.target.value;
+                            setBirthFilterMode(mode);
+                            setYearOfBirthFilter("");
+                            setAgeMinFilter("");
+                            setAgeMaxFilter("");
+                          }}
+                        >
+                          <option value="none">No Birth Filter</option>
+                          <option value="year">Exact Year of Birth</option>
+                          <option value="age">Age Range</option>
+                        </select>
+                      </label>
+
+                      {birthFilterMode === "year" && (
+                        <label>
+                          <span>Year of Birth</span>
+                          <input
+                            type="number"
+                            min="1900"
+                            max="2100"
+                            placeholder="e.g. 1997"
+                            value={yearOfBirthFilter}
+                            onChange={(event) => setYearOfBirthFilter(event.target.value)}
+                          />
+                        </label>
+                      )}
+
+                      {birthFilterMode === "age" && (
+                        <div className="advanced-age-row">
+                          <label>
+                            <span>Min Age</span>
+                            <input
+                              type="number"
+                              min="18"
+                              max="100"
+                              placeholder="Min"
+                              value={ageMinFilter}
+                              onChange={(event) => setAgeMinFilter(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            <span>Max Age</span>
+                            <input
+                              type="number"
+                              min="18"
+                              max="100"
+                              placeholder="Max"
+                              value={ageMaxFilter}
+                              onChange={(event) => setAgeMaxFilter(event.target.value)}
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+
+                    <label className="advanced-check">
+                      <input
+                        type="checkbox"
+                        checked={excludeSameGotra}
+                        onChange={(event) => setExcludeSameGotra(event.target.checked)}
+                      />
+                      <span>Exclude profiles with same Gotra as mine ({loggedInUserGotra})</span>
+                    </label>
+
+                    <div className="advanced-search-actions">
+                      <p className="advanced-result-count">
+                        Showing {filteredRecentProfiles.length} of {profilesTotal || recentProfiles.length} profiles
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
               {matchesLoading ? (
                 <p className="form-note">Loading profiles...</p>
+              ) : filteredRecentProfiles.length === 0 ? (
+                <div className="no-profiles-state">
+                  <p>No Profiles Found</p>
+                  <span>Try changing or clearing filters to see more results.</span>
+                </div>
               ) : (
                 <div className="recent-profile-grid">
-                  {recentProfiles.map((profile) => (
+                  {filteredRecentProfiles.map((profile) => (
                     <article
                       key={profile.profileId}
-                      className="recent-profile-card"
+                      className={`recent-profile-card ${profile.isExactProfileIdMatch ? "exact-id-match" : ""}`}
                       onClick={() => openProfileDetail(profile.profileId)}
                     >
                       <img
@@ -1140,17 +1897,21 @@ const App = () => {
                         <h3>{profile.name}</h3>
                         <p>{profile.age || "-"} yrs · {profile.city || "-"}</p>
                         <p>{profile.height || "-"} · {profile.starPadham || "-"}</p>
+                        <p>{profile.nakshatra || "-"} · {profile.gothram || "-"}</p>
                         <p>{profile.education || "-"}</p>
                         <p>{profile.occupation || "-"}</p>
                         <span className={profile.unlocked ? "unlock-pill yes" : "unlock-pill no"}>
                           {profile.unlocked ? "Unlocked" : "Basic View"}
                         </span>
+                        {profile.isExactProfileIdMatch && (
+                          <span className="exact-match-pill">Exact Profile ID Match</span>
+                        )}
                       </div>
                     </article>
                   ))}
                 </div>
               )}
-              {!matchesLoading && profilesTotalPages > 0 && (
+              {!matchesLoading && !hasActiveSearchOrFilter && profilesTotalPages > 0 && (
                 <div className="member-pagination">
                   <button
                     className="btn ghost"
@@ -1195,6 +1956,61 @@ const App = () => {
             </div>
           </section>
         )}
+        {photoModalOpen && (
+          <div className="photo-modal-overlay" onClick={() => setPhotoModalOpen(false)}>
+            <div className="photo-modal" onClick={(event) => event.stopPropagation()}>
+              <h3>Edit Profile Photo</h3>
+              <p className="form-note">Upload JPG/PNG image (max 5MB).</p>
+              <div className="photo-modal-preview">
+                <img src={photoPreview || memberPhoto} alt="Profile preview" />
+              </div>
+              <input type="file" accept="image/png,image/jpeg" onChange={handlePhotoFileChange} />
+              {photoError && <p className="form-message error">{photoError}</p>}
+              <div className="photo-modal-actions">
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    setPhotoPreview("");
+                    setPhotoError("");
+                  }}
+                  disabled={photoSaveBusy}
+                >
+                  Remove
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setPhotoModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="button" className="btn primary" onClick={savePhotoUpdate} disabled={photoSaveBusy}>
+                  {photoSaveBusy ? "Saving..." : "Save Photo"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {shareToast && (
+          <div className={`share-toast ${shareToastError ? "error" : "success"}`}>{shareToast}</div>
+        )}
+        <ShareModal
+          open={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          shareUrl={getShareUrl(shareMeta)}
+          shareStatus={resolveShareStatus(shareMeta)}
+          expiresAt={shareMeta?.expiresAt}
+          includeContactDetails={shareIncludeContactDetails}
+          onToggleIncludeContactDetails={setShareIncludeContactDetails}
+          expiresInDays={shareExpiresInDays}
+          onChangeExpiresInDays={setShareExpiresInDays}
+          onGenerateLink={createShareLink}
+          onCopyLink={handleCopyShareLink}
+          onShareWhatsApp={handleShareWhatsApp}
+          onShareEmail={handleShareEmail}
+          onDownloadPdf={handleDownloadPdf}
+          onRevokeLink={handleRevokeShareLink}
+          busy={shareBusy}
+          message={shareMessage}
+          isError={shareMessageError}
+        />
         {showUnlockConfirm && (
           <div className="unlock-modal-overlay" onClick={() => setShowUnlockConfirm(false)}>
             <div className="unlock-modal" onClick={(e) => e.stopPropagation()}>
